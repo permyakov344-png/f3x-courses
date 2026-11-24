@@ -203,33 +203,41 @@ local KNOWN = {
 }
 
 -- bind by the exact sensor/param known for a GPS we have seen in the field.
--- Returns how many of the four values were bound.
+-- Returns 1 if a known profile was applied.
 local function bindKnownProfile()
   local ok, all = pcall(system.getSensors)
   if not ok or type(all) ~= "table" then return 0 end
 
-  -- find group rows (param == 0) whose label matches a known sensor
-  for _, g in ipairs(all) do
-    if g.param == 0 and g.id then
-      local low = string.lower(tostring(g.label or ""))
-      for _, k in ipairs(KNOWN) do
-        if low == k.name then
-          for _, e in ipairs(all) do
-            if e.id == g.id and e.param ~= 0 then
-              local pick
-              if e.param == k.lat then pick = "lat"
-              elseif e.param == k.lon then pick = "lon"
-              elseif e.param == k.spd then pick = "spd"
-              elseif e.param == k.hdg then pick = "hdg" end
-              if pick and not bound(pick) then
-                sens[pick].id, sens[pick].param = e.id, e.param
-                saveSensorCfg(pick)
-              end
-            end
+  local function lower(v) return string.lower(tostring(v or "")) end
+
+  for _, k in ipairs(KNOWN) do
+    -- 1) preferred: the group row (param 0) carries the sensor name, e.g. "GPSLog3"
+    local id = nil
+    for _, e in ipairs(all) do
+      if e.param == 0 and e.id and lower(e.label) == k.name then id = e.id; break end
+    end
+    -- 2) fallback: any row labelled "Latitude" from a GPS of a different brand name
+    if not id then
+      for _, e in ipairs(all) do
+        if e.param ~= 0 and e.id and lower(e.label) == "latitude" then id = e.id; break end
+      end
+    end
+
+    if id then
+      for _, e in ipairs(all) do
+        if e.id == id and e.param ~= 0 then
+          local pick
+          if e.param == k.lat then pick = "lat"
+          elseif e.param == k.lon then pick = "lon"
+          elseif e.param == k.spd then pick = "spd"
+          elseif e.param == k.hdg then pick = "hdg" end
+          if pick and not bound(pick) then
+            sens[pick].id, sens[pick].param = e.id, e.param
+            saveSensorCfg(pick)
           end
-          return 1
         end
       end
+      return 1
     end
   end
   return 0
