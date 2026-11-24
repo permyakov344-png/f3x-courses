@@ -21,6 +21,27 @@
 Файл `f3xc.lua` должен лежать **прямо в `Apps`**, а не в подкаталоге. Каталог `Apps/f3xc/`
 создаётся автоматически при первом запуске, если его нет.
 
+## 1a. Главное: приложение надо активировать для модели
+
+Скопированный файл — ещё не работающее приложение. В API 1.7, раздел
+«Loading the applications»:
+
+> every application […] must be activated in `Applications – User Applications`;
+> using the **F(3) “Plus”** button you can activate additional Lua applications
+> (**up to 10 can be active per model** at the same time).
+
+Порядок:
+
+1. `Menu → Applications → User Applications`.
+2. Найти `F3X Courses`. Если он в списке неактивных — выделить и нажать **F3** (Plus).
+3. Если активных уже 10 — убрать лишнее кнопкой **F4** (Delete) для этой модели.
+   Файл с карты при этом **не** удаляется, приложение просто выключено для модели.
+4. Перезагрузить передатчик.
+
+После перезагрузки в `Menu → Applications` появится пункт `F3X Courses`.
+Если его нет — см. `docs/TROUBLESHOOT-NO-MENU.md`: там разобраны причины и что
+смотреть в журнале `Apps/f3xc/lastrun.txt`.
+
 ## 2. Установка с Windows
 
 1. Подключить передатчик по USB, выбрать на нём режим `USB — Storage` (не Joystick).
@@ -53,7 +74,7 @@ diskutil mount disk5s1
 
 1. Выключить и включить передатчик (список Lua-приложений читается при загрузке).
 2. `Menu → Applications → F3X Courses`.
-3. Должна открыться форма с заголовком `F3X Courses 0.1.1`.
+3. Должна открыться форма с заголовком `F3X Courses 0.1.3`.
 
 Если пункта нет — см. раздел «Если не появилось».
 

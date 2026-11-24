@@ -1,6 +1,6 @@
 -- ###############################################################################################
 -- #  F3X Courses  -  course manager / base-line helper for JETI DC/DS transmitters
--- #  Version 0.1.0  (step A: skeleton, single menu, JSON course storage)
+-- #  Version 0.1.3  (step A: skeleton, single menu, JSON course storage)
 -- #
 -- #  Author of this app:  permyakov344-png
 -- #
@@ -27,7 +27,7 @@
 -- ###############################################################################################
 
 local appName    = "F3X Courses"
-local appVersion = "0.1.1"
+local appVersion = "0.1.3"
 local appAuthor  = "permyakov344-png"
 
 local dataDir   = "Apps/f3xc"
@@ -555,6 +555,40 @@ end
 -- -----------------------------------------------------------------------------------------------
 local currentForm = 1
 
+-- diagnostics: every start writes what happened into Apps/f3xc/lastrun.txt,
+-- so a failure on the transmitter can be read back as a file instead of guessed
+local logLines = {}
+local function log(s)
+  logLines[#logLines + 1] = tostring(s)
+  -- flush immediately: if the next call kills the app, the file still has the trail
+  pcall(function()
+    local txt = table.concat(logLines, "\n") .. "\n"
+    pcall(function() io.mkdir("Apps") end)
+    pcall(function() io.mkdir(dataDir) end)
+    for _, path in ipairs({ dataDir .. "/lastrun.txt", "lastrun.txt" }) do
+      local f = io.open(path, "w")
+      if f then
+        io.write(f, txt)
+        io.close(f)
+        if path == dataDir .. "/lastrun.txt" then break end
+      end
+    end
+  end)
+end
+
+local lastError = nil
+
+-- set once the widget form is built; the canvas printer must stay silent then,
+-- otherwise its text would be drawn on top of the form layout
+local formBuilt = false
+
+-- canvas fallback mode: the form was registered WITHOUT an initFunction, or a
+-- widget raised while building. The whole page is then drawn with lcd, which is
+-- exactly how the apps that already work on this transmitter are built.
+local canvasMode = false
+local canvasPage = 1        -- 1 = courses, 2 = sensors
+
+-- real form builder, never called directly by the firmware
 local function initForm(formID)
   currentForm = formID
   if formID == 2 then
@@ -564,22 +598,300 @@ local function initForm(formID)
   end
 end
 
-local function keyPressed(key)
-  if currentForm == 2 then
-    keyFormSensors(key)
+-- a broken widget must never break the form registration: if it does, the app
+-- silently disappears from Menu -> Applications while its telemetry window stays
+local function initFormGuarded(formID)
+  local ok, err = pcall(initForm, formID)
+  if not ok then
+    lastError = tostring(err)
+    log("initForm(" .. tostring(formID) .. ") error: " .. lastError)
+    formBuilt = false
+    pcall(function()
+      form.addLabel({ label = "F3X: init error", font = FONT_BOLD })
+      form.addLabel({ label = tostring(err):sub(1, 58), font = FONT_MINI })
+      form.setButton(1, "Close", ENABLED)
+    end)
   else
-    keyFormCourses(key)
+    lastError = nil
+    formBuilt = true               -- widgets own the canvas, prints stay silent
+  end
+end
+
+-- -----------------------------------------------------------------------------------------------
+-- canvas page (fallback): the same two pages, drawn with lcd only
+-- -----------------------------------------------------------------------------------------------
+local canvasSel = 1     -- highlighted course index
+local canvasMsg = ""
+
+local function canvasLines(w, h)
+  local out = {}
+  local function add(text, font, color)
+    out[#out + 1] = { text = text, font = font or FONT_NORMAL, color = color }
+  end
+
+  add(appName .. " " .. appVersion, FONT_BOLD, { 0, 220, 255 })
+  add("", FONT_MINI)
+
+  if canvasPage == 1 then
+    local c = S.courses[canvasSel]
+    add(string.format("Courses: %d   active: %d", #S.courses, S.active), FONT_BOLD)
+    if c then
+      add(string.format("%d. %s%s", canvasSel, tostring(c.name),
+                        canvasSel == S.active and "  *" or ""), FONT_BIG)
+      add(string.format("%s   %.0f m", tostring(c.typ), tonumber(c.dist) or 0))
+      if c.aLat and c.aLon then
+        add(string.format("A %.5f %.5f", c.aLat, c.aLon), FONT_MINI)
+      else
+        add("A not set  (F1 New from GPS)", FONT_MINI)
+      end
+      if c.bLat and c.bLon then
+        add(string.format("B %.5f %.5f", c.bLat, c.bLon), FONT_MINI)
+      else
+        add("B not set  (step B)", FONT_MINI)
+      end
+    else
+      add("no courses", FONT_BOLD)
+    end
+    add("", FONT_MINI)
+    local la, lo = currentPos()
+    if la then
+      add(string.format("GPS %.5f %.5f", la, lo), FONT_MINI)
+      if c and c.aLat and c.aLon then
+        local ok, d = pcall(function()
+          return gps.getDistance(gps.newPoint(c.aLat, c.aLon), gps.newPoint(la, lo))
+        end)
+        if ok and d then add(string.format("to A  %.1f m", d), FONT_MINI) end
+      end
+    else
+      add("GPS no fix / not bound", FONT_MINI)
+    end
+    if #canvasMsg > 0 then add(canvasMsg, FONT_MINI) end
+    add("", FONT_MINI)
+    add("F1 New  F2 Del  F3 Act", FONT_MINI)
+    add("UP/DN select   F5 Sensors >>", FONT_MINI)
+  else
+    -- sensors page: run the same auto-binding the widget page runs, so the
+    -- canvas mode is not a dead end (on this transmitter it is the only mode)
+    buildSensorList()
+    if not (bound("lat") and bound("lon")) then
+      local ok = pcall(guessSensors)
+      if ok then canvasMsg = "auto-bound from telemetry" end
+    end
+
+    local n = #sensorList - 1
+    if n < 0 then n = 0 end
+    add("Sensor binding  (" .. n .. " values)", FONT_BOLD)
+
+    local function nameOf(which)
+      if not bound(which) then return "-- not bound --" end
+      for i = 2, #sensorMap do
+        local m = sensorMap[i]
+        if m.id == sens[which].id and m.param == sens[which].param then
+          return sensorList[i]
+        end
+      end
+      return string.format("id %d / p %d", sens[which].id or 0, sens[which].param or 0)
+    end
+
+    add("Lat " .. nameOf("lat"), FONT_MINI)
+    add("Lon " .. nameOf("lon"), FONT_MINI)
+    add("Spd " .. nameOf("spd"), FONT_MINI)
+    add("Dir " .. nameOf("hdg"), FONT_MINI)
+
+    add("", FONT_MINI)
+    local la, lo = currentPos()
+    if la then
+      add(string.format("fix %.5f %.5f", la, lo), FONT_MINI)
+    else
+      add("no fix (model off?)", FONT_MINI)
+    end
+    local spd, hdg = sensorValue("spd"), sensorValue("hdg")
+    if spd then add(string.format("speed %.1f", spd), FONT_MINI) end
+    if hdg then add(string.format("dir   %.0f", hdg), FONT_MINI) end
+    if #canvasMsg > 0 then add(canvasMsg, FONT_MINI) end
+
+    add("", FONT_MINI)
+    add("F4  rebind (auto)", FONT_MINI)
+    add("ESC / F1  << Courses", FONT_MINI)
+  end
+  return out
+end
+
+local function drawCanvas(w, h)
+  w, h = w or 320, h or 240
+  lcd.setColor(lcd.getFgColor())
+  local y, lines = 4, canvasLines(w, h)
+  for _, ln in ipairs(lines) do
+    if ln.color then
+      lcd.setColor(ln.color[1], ln.color[2], ln.color[3])
+    else
+      lcd.setColor(lcd.getFgColor())
+    end
+    if #ln.text > 0 then lcd.drawText(4, y, ln.text, ln.font) end
+    y = y + ((ln.font == FONT_BIG) and 24 or 18)
+    if y > h - 8 then break end
+  end
+end
+
+-- keys in canvas mode: the whole UI is driven from here
+local function keyCanvas(key)
+  if canvasPage == 2 then
+    if key == KEY_4 then                 -- rebind from the current telemetry
+      buildSensorList()
+      local ok = pcall(guessSensors)
+      canvasMsg = ok and "rebound" or "rebind failed"
+      beep(0, 400, 700)
+      return
+    end
+    if key == KEY_1 or key == KEY_ESC then
+      canvasPage = 1
+      beep(0, 400, 700)
+    end
+    return
+  end
+
+  if key == KEY_UP then
+    canvasSel = canvasSel - 1
+    if canvasSel < 1 then canvasSel = #S.courses end
+  elseif key == KEY_DOWN then
+    canvasSel = canvasSel + 1
+    if canvasSel > #S.courses then canvasSel = 1 end
+  elseif key == KEY_1 then                       -- new course from GPS
+    local la, lo = currentPos()
+    if not la then
+      beep(2, 500, 250)
+      canvasMsg = "No GPS. F5 for sensors."
+      return
+    end
+    local c = newCourse(string.format("Course %d", #S.courses + 1))
+    c.aLat, c.aLon = la, lo
+    S.courses[#S.courses + 1] = c
+    canvasSel = #S.courses
+    saveCourses()
+    beep(0, 600, 650)
+    canvasMsg = string.format("New: %.5f %.5f", la, lo)
+  elseif key == KEY_2 then                       -- delete
+    if #S.courses <= 1 then
+      canvasMsg = "Cannot delete the last course"
+      return
+    end
+    table.remove(S.courses, canvasSel)
+    if canvasSel > #S.courses then canvasSel = #S.courses end
+    if S.active > #S.courses then S.active = #S.courses end
+    saveCourses()
+    beep(1, 300, 350)
+    canvasMsg = "Deleted"
+  elseif key == KEY_3 then                       -- set active
+    S.active = canvasSel
+    saveCourses()
+    beep(0, 600, 800)
+    canvasMsg = string.format("Active: %s", tostring(S.courses[canvasSel].name))
+  elseif key == KEY_4 then                       -- reload from card
+    loadCourses()
+    canvasSel = S.active
+    beep(0, 400, 500)
+    canvasMsg = "Reloaded from card"
+  elseif key == KEY_5 then                       -- sensors page
+    canvasPage = 2
+    beep(0, 400, 800)
+  elseif key == KEY_ESC then
+    pcall(system.exitScript)
+  end
+end
+
+-- printFunction: the firmware calls it to draw the form. In widget mode the
+-- widgets own the canvas and this stays silent; in canvas mode it draws the page.
+local function printForm(w, h)
+  if not canvasMode and formBuilt then return end
+  drawCanvas(w, h)      -- canvas mode, or widgets never built: show something
+end
+
+local function keyPressed(key)
+  local ok, err = pcall(function()
+    -- adaptive routing: if the widget form was never built (canvas-only
+    -- registration, the way every working app on this transmitter is built),
+    -- the whole UI is driven by the canvas page
+    if canvasMode or not formBuilt then
+      keyCanvas(key)
+    elseif currentForm == 2 then
+      keyFormSensors(key)
+    else
+      keyFormCourses(key)
+    end
+  end)
+  if not ok then
+    lastError = tostring(err)
+    log("keyPressed(" .. tostring(key) .. ") error: " .. lastError)
+  end
+end
+
+-- register the form into the first menu that accepts it; MENU_* constants are
+-- globals of the firmware and a missing one must not abort the whole init
+local function registerFormAnywhere()
+  local menus = {
+    { id = MENU_APPS,     name = "MENU_APPS"     },
+    { id = MENU_ADVANCED, name = "MENU_ADVANCED" },
+    { id = MENU_MAIN,     name = "MENU_MAIN"     },
+  }
+  for _, m in ipairs(menus) do
+    if m.id ~= nil then
+      -- 1) normal widget form
+      local ok, ret = pcall(system.registerForm, 1, m.id, appName,
+                            initFormGuarded, keyPressed, printForm)
+      log("registerForm " .. m.name .. "(" .. tostring(m.id) .. ") -> ok=" ..
+          tostring(ok) .. " ret=" .. tostring(ret))
+      if ok and ret then return true, m.name end
+
+      -- 2) canvas-only form (nil initFunction). This is the shape used by every
+      -- app that works on this transmitter: nil, key, draw. Nothing is built at
+      -- registration time, so nothing can fail there.
+      local ok2, ret2 = pcall(system.registerForm, 1, m.id, appName,
+                              nil, keyPressed, printForm)
+      log("registerForm " .. m.name .. " canvas-only -> ok=" ..
+          tostring(ok2) .. " ret=" .. tostring(ret2))
+      if ok2 and ret2 then
+        canvasMode = true
+        return true, m.name .. "/canvas"
+      end
+    else
+      log("registerForm " .. m.name .. " -> constant is nil")
+    end
+  end
+  return false
+end
+
+local function initBody()
+  log("init " .. appName .. " " .. appVersion .. "  lua " .. tostring(_VERSION))
+
+  local okDir, errDir = pcall(ensureDir)
+  if not okDir then log("ensureDir: " .. tostring(errDir)) end
+
+  local okC, errC = pcall(loadCourses)
+  if not okC then log("loadCourses: " .. tostring(errC)) end
+
+  local okS, errS = pcall(loadSensorCfg)
+  if not okS then log("loadSensorCfg: " .. tostring(errS)) end
+
+  ui.sel = S.active
+
+  -- the form goes first: it is the visible entry in the menus, telemetry alone
+  -- would leave the app reachable only from the telemetry screen list
+  local registered = registerFormAnywhere()
+
+  local okT, retT = pcall(system.registerTelemetry, 1, appName, 2, drawTelemetry)
+  log("registerTelemetry -> ok=" .. tostring(okT) .. " ret=" .. tostring(retT))
+
+  if not registered then
+    log("FORM NOT REGISTERED")
+    pcall(system.messageBox, appName .. ": form not registered, see log")
+  else
+    log("ready")
   end
 end
 
 local function init(code)
-  ensureDir()
-  loadCourses()
-  loadSensorCfg()
-  ui.sel = S.active
-
-  system.registerTelemetry(1, appName, 2, drawTelemetry)
-  system.registerForm(1, MENU_APPS, appName, initForm, keyPressed)
+  local ok, err = pcall(initBody)
+  if not ok then log("init failed: " .. tostring(err)) end
 end
 
 local function loop()

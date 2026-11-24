@@ -26,14 +26,29 @@ mkdir -p "$TX/Apps/f3xc" 2>/dev/null || { echo "Нет прав на запис�
 cp "$REPO/Apps/f3xc.lua" "$TX/Apps/f3xc.lua" \
   && echo "  скопировано: Apps/f3xc.lua" \
   || echo "  ОШИБКА: Apps/f3xc.lua"
-cp "$REPO/tools/sensors_dump.lua" "$TX/Apps/sensors_dump.lua" \
-  && echo "  скопировано: Apps/sensors_dump.lua (диагностика)" \
-  || echo "  ОШИБКА: Apps/sensors_dump.lua"
+
+# диагностика ставится только по просьбе: каждое лишнее приложение занимает
+# один из 10 слотов активных приложений модели
+if [ "${WITH_DUMP:-0}" = "1" ]; then
+  cp "$REPO/tools/sensors_dump.lua" "$TX/Apps/sensors_dump.lua" \
+    && echo "  скопировано: Apps/sensors_dump.lua (диагностика)" \
+    || echo "  ОШИБКА: Apps/sensors_dump.lua"
+else
+  rm -f "$TX/Apps/sensors_dump.lua" "$TX/Apps/._sensors_dump.lua" \
+        "$TX/Apps/._sensors_dump" 2>/dev/null
+fi
+
+# macOS оставляет служебные файлы ._name — прошивка их не понимает
+find "$TX/Apps" -maxdepth 1 -name "._f3xc*" -delete 2>/dev/null
 
 sync
 echo
-echo "Готово. Выключи/включи передатчик -> Menu -> Applications."
-echo "Сначала запусти 'F3X Sensors Dump' — он положит Apps/f3xc/sensors.txt."
+echo "Готово."
+echo "  ВАЖНО: файл ещё не активирован для модели."
+echo "  Menu -> Applications -> User Applications -> выделить 'F3X Courses' -> F3(Plus)"
+echo "  (активных приложений на модель максимум 10; лишние убираются F4 Delete)"
+echo "  Затем перезагрузить передатчик -> Menu -> Applications -> F3X Courses."
+echo "  Журнал запуска: Apps/f3xc/lastrun.txt"
 echo
 echo "--- сенсоры, уже прописанные в моделях:"
 for md in "$TX/Model" "$TX/Models"; do
