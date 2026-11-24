@@ -16,12 +16,13 @@
 -- #  See the GNU General Public License for more details: see the LICENSE file.
 -- ###############################################################################################
 -- #  What this version does (step A only):
--- #    - appears in Menu -> Applications as two entries: "F3X Courses" and "F3X Sensors"
+-- #    - appears in Menu -> Applications as one entry: "F3X Courses"
+-- #      with an internal "Sensors >>" page
 -- #    - keeps a list of named courses in Apps/f3xc/courses.jsn  (survives power cycles)
 -- #    - lets you create a course from the current GPS position, rename it, change type and
 -- #      distance, delete it, choose the active one
 -- #    - telemetry window shows the active course + live GPS state (proves sensor binding)
--- #    - sensor binding is done in the "F3X Sensors" form and lists ALL sensors, not only type 9
+-- #    - sensor binding lists ALL telemetry values, not only type 9
 -- #  Deliberately NOT in this version: A/B scan wizard, gate math, beeps. That is step B/C.
 -- ###############################################################################################
 
@@ -40,21 +41,18 @@ local ui = { sel = 1 }                   -- current selection in the courses for
 local C = {}                             -- form widget handles (courses form)
 local SC = {}                            -- form widget handles (sensors form)
 local msg = ""                           -- last status message shown in the courses form
+local needReinit = false                 -- deferred form.reinit (safer than reinit inside a widget callback)
 local sens = { lat = {}, lon = {}, spd = {}, hdg = {} }
 local sensorMap = {}                     -- index -> {id=, param=, label=}
 local sensorList = {}                    -- labels for the selectbox
 local scrW, scrH = 0, 0
+local distToA, distToAtime = nil, 0    -- cached distance to base A (avoids heavy math in the draw loop)
 
 -- -----------------------------------------------------------------------------------------------
 -- small helpers
 -- -----------------------------------------------------------------------------------------------
 local function beep(kind, length, freq)
   system.playBeep(kind or 0, length or 700, freq or 250)
-end
-
-local function fmt(v, dec)
-  if v == nil then return "--" end
-  return string.format("%." .. (dec or 1) .. "f", v)
 end
 
 local function ensureDir()
@@ -131,10 +129,15 @@ end
 -- GPS / sensors
 -- -----------------------------------------------------------------------------------------------
 local function loadSensorCfg()
-  sens.lat.id = system.pLoad("latId");  sens.lat.param = system.pLoad("latParam")
-  sens.lon.id = system.pLoad("lonId");  sens.lon.param = system.pLoad("lonParam")
-  sens.spd.id = system.pLoad("spdId");  sens.spd.param = system.pLoad("spdParam")
-  sens.hdg.id = system.pLoad("hdgId");  sens.hdg.param = system.pLoad("hdgParam")
+  local function get(key)
+    local v = system.pLoad(key)
+    if v == nil or v == 0 then return nil end
+    return v
+  end
+  sens.lat.id = get("latId");  sens.lat.param = get("latParam")
+  sens.lon.id = get("lonId");  sens.lon.param = get("lonParam")
+  sens.spd.id = get("spdId");  sens.spd.param = get("spdParam")
+  sens.hdg.id = get("hdgId");  sens.hdg.param = get("hdgParam")
 end
 
 local function saveSensorCfg(which)
@@ -199,7 +202,7 @@ local function guessSensors()
   local keys = {
     lat = { "lat" },
     lon = { "lon" },
-    spd = { "speed", "gspeed", "velocity", "vario" },
+    spd = { "speed", "gspeed", "velocity" },
     hdg = { "head", "dir", "cour", "bear", "azim" },
   }
   for which, pats in pairs(keys) do
@@ -223,7 +226,7 @@ end
 -- -----------------------------------------------------------------------------------------------
 -- telemetry window
 -- -----------------------------------------------------------------------------------------------
-local function drawTelemetry(w, h)
+local function drawTelemetryBody(w, h)
   scrW, scrH = w, h
   local y, dy = 6, 20
   local function line(text, font)
@@ -239,7 +242,7 @@ local function drawTelemetry(w, h)
   local c = activeCourse()
   if c then
     line("ACTIVE  " .. tostring(c.name), FONT_BOLD)
-    line(string.format("%s  %d m", tostring(c.typ), tonumber(c.dist) or 0))
+    line(string.format("%s  %.0f m", tostring(c.typ), tonumber(c.dist) or 0))
     if c.brg then
       line(string.format("bearing %.0f deg", c.brg))
     else
@@ -255,10 +258,15 @@ local function drawTelemetry(w, h)
     line(string.format("GPS  %.5f", la))
     line(string.format("     %.5f", lo))
     if c and c.aLat and c.aLon then
-      local ok, d = pcall(function()
-        return gps.getDistance(gps.newPoint(c.aLat, c.aLon), gps.newPoint(la, lo))
-      end)
-      if ok and d then line(string.format("to A %.1f m", d)) end
+      local now = system.getTimeCounter()
+      if distToA == nil or now - distToAtime > 1000 then
+        distToAtime = now
+        local ok, d = pcall(function()
+          return gps.getDistance(gps.newPoint(c.aLat, c.aLon), gps.newPoint(la, lo))
+        end)
+        distToA = (ok and d) and d or -1
+      end
+      if distToA and distToA >= 0 then line(string.format("to A %.1f m", distToA)) end
     else
       line("A not set yet")
     end
@@ -269,6 +277,16 @@ local function drawTelemetry(w, h)
   local spd = sensorValue("spd")
   if spd then line(string.format("speed %.1f", spd)) end
   line(string.format("courses %d   active %d", #S.courses, S.active))
+end
+
+-- telemetry windows are drawn on a timer; never let a runtime error kill the widget
+local function drawTelemetry(w, h)
+  local ok = pcall(drawTelemetryBody, w, h)
+  if not ok then
+    lcd.setColor(lcd.getFgColor())
+    lcd.drawText(4, 6, appName, FONT_BOLD)
+    lcd.drawText(4, 30, "draw error", FONT_NORMAL)
+  end
 end
 
 -- -----------------------------------------------------------------------------------------------
@@ -299,6 +317,7 @@ end
 
 local function initFormCourses()
   C = {}
+  needReinit = false
   if ui.sel > #S.courses then ui.sel = 1 end
 
   form.setTitle(appName .. " " .. appVersion)
@@ -315,7 +334,7 @@ local function initFormCourses()
   C.sel = form.addSelectbox(list, ui.sel, true, function(v)
     applyCourseEdits()          -- keep what was typed before switching
     ui.sel = v
-    form.reinit(1)
+    needReinit = true
   end, { width = 250 })
 
   local c = S.courses[ui.sel]
@@ -333,16 +352,15 @@ local function initFormCourses()
   form.addLabel({ label = "Distance", width = 95 })
   C.dist = form.addIntbox(tonumber(c.dist) or 150, 5, 500, 150, 0, 5, nil, { width = 90 })
 
+  local function posText(lat, lon)
+    if lat == nil or lon == nil then return "not set" end
+    return string.format("%.5f  %.5f", lat, lon)
+  end
+
   form.addRow(1)
-  form.addLabel({
-    label = string.format("A: %s", c.aLat and string.format("%.5f  %.5f", c.aLat, c.aLon) or "not set"),
-    font = FONT_MINI,
-  })
+  form.addLabel({ label = "A: " .. posText(c.aLat, c.aLon), font = FONT_MINI })
   form.addRow(1)
-  form.addLabel({
-    label = string.format("B: %s", c.bLat and string.format("%.5f  %.5f", c.bLat, c.bLon) or "not set"),
-    font = FONT_MINI,
-  })
+  form.addLabel({ label = "B: " .. posText(c.bLat, c.bLon), font = FONT_MINI })
 
   form.addLink(function() form.reinit(2) end, { label = "Sensors >>" })
 
@@ -414,6 +432,13 @@ end
 local function sensorChanged(which)
   return function(v)
     local m = sensorMap[v]
+    if m and m.id == nil then                  -- "---" selected: unbind
+      sens[which].id = nil
+      sens[which].param = nil
+      system.pSave(which .. "Id", 0)
+      system.pSave(which .. "Param", 0)
+      return
+    end
     if m then
       sens[which].id = m.id
       sens[which].param = m.param
@@ -507,7 +532,10 @@ local function init(code)
 end
 
 local function loop()
-  -- nothing periodic yet; step C will move flight logic here
+  if needReinit then
+    needReinit = false
+    form.reinit(1)
+  end
 end
 
 return {
