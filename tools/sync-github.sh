@@ -45,7 +45,7 @@ else
     FILES=$(git diff --cached --name-only)
     COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
     if echo "$FILES" | grep -q "^Apps/"; then
-      VER=$(grep -m1 'local appVersion' Apps/f3xc.lua 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')
+      VER=$(grep -m1 'local appVersion' Apps/F3x Courses.lua 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')
       MSG="app ${VER:-}: обновление ($COUNT файл(ов))"
     elif echo "$FILES" | grep -q "^docs/screens/"; then
       MSG="docs: скриншоты передатчика и история ($COUNT файл(ов))"

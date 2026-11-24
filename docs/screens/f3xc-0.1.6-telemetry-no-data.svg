@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+<rect width="320" height="240" fill="#000"/>
+<rect x="0" y="0" width="320" height="240" fill="rgb(10,14,18)" fill-opacity="1.00"/>
+<rect x="5" y="5" width="310" height="26" fill="rgb(26,32,40)" fill-opacity="1.00"/>
+<rect x="5" y="5" width="4" height="26" fill="rgb(0,198,255)" fill-opacity="1.00"/>
+<text x="15" y="21" font-family="Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" fill="rgb(236,240,244)">Obri-obri</text>
+<rect x="217" y="9" width="92" height="18" fill="rgb(236,86,86)" fill-opacity="1.00"/>
+<text x="238" y="22" font-family="Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" fill="rgb(10,14,18)">GPS НЕТ</text>
+<rect x="5" y="36" width="152" height="74" fill="rgb(26,32,40)" fill-opacity="1.00"/>
+<rect x="5" y="36" width="152" height="74" rx="0" fill="none" stroke="rgb(246,190,62)" stroke-width="1"/>
+<rect x="12" y="43" width="28" height="28" fill="rgb(246,190,62)" fill-opacity="1.00"/>
+<text x="21" y="62" font-family="Helvetica,Arial,sans-serif" font-size="15" font-weight="bold" fill="rgb(10,14,18)">A</text>
+<text x="47" y="53" font-family="Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" fill="rgb(246,190,62)">не задана</text>
+<text x="47" y="72" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(136,146,158)">нажмите F1</text>
+<rect x="162" y="36" width="152" height="74" fill="rgb(26,32,40)" fill-opacity="1.00"/>
+<rect x="162" y="36" width="152" height="74" rx="0" fill="none" stroke="rgb(246,190,62)" stroke-width="1"/>
+<rect x="169" y="43" width="28" height="28" fill="rgb(246,190,62)" fill-opacity="1.00"/>
+<text x="178" y="62" font-family="Helvetica,Arial,sans-serif" font-size="15" font-weight="bold" fill="rgb(10,14,18)">B</text>
+<text x="204" y="53" font-family="Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" fill="rgb(246,190,62)">не задана</text>
+<text x="204" y="72" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(136,146,158)">шаг B: мастер</text>
+<rect x="5" y="115" width="310" height="46" fill="rgb(26,32,40)" fill-opacity="1.00"/>
+<text x="13" y="127" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(136,146,158)">ЛИНИЯ A-B</text>
+<text x="13" y="140" font-family="Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" fill="rgb(136,146,158)">задайте базы</text>
+<text x="287" y="142" font-family="Helvetica,Arial,sans-serif" font-size="15" font-weight="bold" fill="rgb(136,146,158)">--</text>
+<rect x="5" y="166" width="310" height="26" fill="rgb(26,32,40)" fill-opacity="1.00"/>
+<rect x="11" y="172" width="56" height="18" fill="rgb(236,86,86)" fill-opacity="1.00"/>
+<text x="31" y="182" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(10,14,18)">НЕТ</text>
+<text x="73" y="184" font-family="Helvetica,Arial,sans-serif" font-size="10" font-weight="normal" fill="rgb(236,240,244)">27.4 км/ч</text>
+<text x="247" y="182" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(246,190,62)">ДАТЧИКИ 2/4</text>
+<text x="173" y="184" font-family="Helvetica,Arial,sans-serif" font-size="10" font-weight="normal" fill="rgb(236,240,244)">041° СВ</text>
+<rect x="5" y="197" width="310" height="16" fill="rgb(36,44,54)" fill-opacity="1.00"/>
+<text x="11" y="208" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(236,86,86)">GPS не привязан: нажмите F3</text>
+</svg>

@@ -24,7 +24,7 @@ bash tools/scan-sensors.sh
 Тогда работает одноразовая диагностика:
 
 ```bash
-bash tools/install-to-tx.sh      # копирует Apps/f3xc.lua + Apps/sensors_dump.lua
+bash tools/install-to-tx.sh      # копирует Apps/F3x Courses.lua + Apps/sensors_dump.lua
 ```
 
 Потом:

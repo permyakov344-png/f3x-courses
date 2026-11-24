@@ -1,6 +1,6 @@
 -- ###############################################################################################
 -- #  F3X Courses  -  course manager / base-line helper for JETI DC/DS transmitters
--- #  Version 0.1.5  (Russian interface; full screen telemetry: bases A/B, A-B line)
+-- #  Version 0.1.6  (Russian interface; full screen telemetry: bases A/B, A-B line)
 -- #
 -- #  Author of this app:  permyakov344-png
 -- #
@@ -27,7 +27,7 @@
 -- ###############################################################################################
 
 local appName    = "F3X Courses"
-local appVersion = "0.1.5"
+local appVersion = "0.1.6"
 local appAuthor  = "permyakov344-png"
 
 local dataDir   = "Apps/f3xc"
@@ -474,21 +474,25 @@ local function drawBaseTile(x, y, w, h, letter, c, dist, brg, which)
   tlFill(x, y, w, h, TL.panel)
   tlFrame(x, y, w, h, has and TL.edge or TL.warn)
 
+  -- the tile can grow on a tall screen; keep the text block centred instead of
+  -- leaving it stuck to the top edge
+  local top = y + math.max(0, (h - 74) / 2)
+
   local badge = 28
-  tlFill(x + 7, y + 7, badge, badge, has and TL.accent or TL.warn)
-  tlTextCenter(x + 7, badge, y + 11, letter, FONT_BIG, TL.bg)
+  tlFill(x + 7, top + 7, badge, badge, has and TL.accent or TL.warn)
+  tlTextCenter(x + 7, badge, top + 11, letter, FONT_BIG, TL.bg)
 
   local tx = x + 7 + badge + 7
   if has then
-    tlText(tx, y + 4, fmtDist(dist), FONT_BIG, TL.text)
-    tlText(tx, y + 28,
+    tlText(tx, top + 4, fmtDist(dist), FONT_BIG, TL.text)
+    tlText(tx, top + 28,
            (brg and (brgLetter(brg) .. " " .. fmtBearing(brg) .. "°")) or "--",
            FONT_NORMAL, TL.accent)
-    tlText(tx, y + 46, string.format("%.5f", c[which .. "Lat"]), FONT_MINI, TL.dim)
-    tlText(tx, y + 58, string.format("%.5f", c[which .. "Lon"]), FONT_MINI, TL.dim)
+    tlText(tx, top + 46, string.format("%.5f", c[which .. "Lat"]), FONT_MINI, TL.dim)
+    tlText(tx, top + 58, string.format("%.5f", c[which .. "Lon"]), FONT_MINI, TL.dim)
   else
-    tlText(tx, y + 6, "не задана", FONT_BOLD, TL.warn)
-    tlText(tx, y + 28, which == "a" and "нажмите F1" or "шаг B: мастер",
+    tlText(tx, top + 6, "не задана", FONT_BOLD, TL.warn)
+    tlText(tx, top + 28, which == "a" and "нажмите F1" or "шаг B: мастер",
            FONT_MINI, TL.dim)
   end
 end
@@ -524,7 +528,6 @@ local function drawGauge(x, y, w, h, off, along, c)
   tlText(x + 8, y + 4, title, FONT_MINI, TL.dim)
   tlText(x + 8, y + 14, word, FONT_BOLD, color)
   tlTextRight(x + w - 8, y + 12, value, FONT_BIG, color)
-
   -- distance covered along the line, in the title row, clear of the bar
   if along and c and c.dist then
     tlTextRight(x + w - 8, y + 4,
@@ -635,8 +638,10 @@ local function drawTelemetryBody(w, h)
 
   tlFill(0, 0, w, h, TL.bg)
 
-  -- size 3 keeps the transmitter status bar at the bottom left: reserve it
-  local bottom = (h >= 200) and 22 or 4
+  -- size 4 (API 1.7: "other") gives the whole screen with no status bar at the
+  -- bottom left, so nothing of the firmware is left over the window. When the
+  -- firmware falls back to size 3 the bar is there and must be kept free.
+  local bottom = optsFull and 0 or ((h >= 200) and 22 or 4)
   local pad = 5
   local avail = h - bottom
 
@@ -664,6 +669,17 @@ local function drawTelemetryBody(w, h)
       short = short - cut2
     end
     if short > 0 then hintH = 0 end                   -- 3) no hint line
+  elseif room > need then
+    -- a tall canvas must be filled to the bottom edge, not left with an empty
+    -- strip: grow the gauge and then the tiles, exactly as much as there is
+    local spare = room - need
+    local add = math.min(spare, 30)
+    gaugeH = gaugeH + add
+    spare = spare - add
+    local add2 = math.min(spare, 26)
+    tileH = tileH + add2
+    spare = spare - add2
+    statusH = statusH + math.min(spare, 6)
   end
 
   local tileW = (w - pad * 2 - gap) / 2
@@ -999,6 +1015,10 @@ end
 
 local lastError = nil
 
+-- true when the window was registered with size 4 ("other" in API 1.7): the
+-- screen is then ours to the last pixel, without the firmware status bar
+local optsFull = false
+
 -- set once the widget form is built; the canvas printer must stay silent then,
 -- otherwise its text would be drawn on top of the form layout
 local formBuilt = false
@@ -1299,13 +1319,22 @@ local function initBody()
   -- would leave the app reachable only from the telemetry screen list
   local registered = registerFormAnywhere()
 
-  -- size 3 = the whole screen, and the only size that also passes key presses
-  local okT, retT = pcall(system.registerTelemetry, 1, appName, 3, drawTelemetry,
+  -- size 4 = "other" in API 1.7: the whole screen, no firmware status bar.
+  -- Falls back to 3 (full screen, bar at the bottom left) if the firmware
+  -- refuses the value, then to 2.
+  local okT, retT = pcall(system.registerTelemetry, 1, appName, 4, drawTelemetry,
                           keyTelemetry)
-  log("registerTelemetry(3) -> ok=" .. tostring(okT) .. " ret=" .. tostring(retT))
-  if not (okT and retT) then
-    local okT2, retT2 = pcall(system.registerTelemetry, 1, appName, 2, drawTelemetry)
-    log("registerTelemetry(2) -> ok=" .. tostring(okT2) .. " ret=" .. tostring(retT2))
+  log("registerTelemetry(4) -> ok=" .. tostring(okT) .. " ret=" .. tostring(retT))
+  if okT and retT then
+    optsFull = true
+  else
+    okT, retT = pcall(system.registerTelemetry, 1, appName, 3, drawTelemetry,
+                      keyTelemetry)
+    log("registerTelemetry(3) -> ok=" .. tostring(okT) .. " ret=" .. tostring(retT))
+    if not (okT and retT) then
+      local okT2, retT2 = pcall(system.registerTelemetry, 1, appName, 2, drawTelemetry)
+      log("registerTelemetry(2) -> ok=" .. tostring(okT2) .. " ret=" .. tostring(retT2))
+    end
   end
 
   -- button labels of the full screen window (V6.05+, has no effect on small ones)

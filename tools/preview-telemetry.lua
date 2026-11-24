@@ -178,7 +178,7 @@ system = {
 form = { addRow = function() return 1 end, addLabel = function() return 1 end,
          setButton = function() end, setTitle = function() end }
 
-local app = assert(loadfile("Apps/f3xc.lua"))()
+local app = assert(loadfile("Apps/F3x Courses.lua"))()
 app.init()
 
 -- the printFunction is captured by registerTelemetry; rebuild it by calling the

@@ -1,4 +1,4 @@
--- Runs the real Apps/f3xc.lua with stubbed JETI API.
+-- Runs the real Apps/F3x Courses.lua with stubbed JETI API.
 --
 -- The bug this guards against: the app showed up only in the telemetry/sensor
 -- list and never in Menu -> Applications. A telemetry window is stored in the
@@ -154,8 +154,8 @@ local function resetStubs()
 end
 
 local function runApp()
-  local chunk, err = loadfile("Apps/f3xc.lua")
-  assert(chunk, "cannot load Apps/f3xc.lua: " .. tostring(err))
+  local chunk, err = loadfile("Apps/F3x Courses.lua")
+  assert(chunk, "cannot load Apps/F3x Courses.lua: " .. tostring(err))
   local app = chunk()
   assert(type(app) == "table", "app must return a table")
   assert(type(app.init) == "function", "app.init missing")
@@ -308,19 +308,33 @@ assert(drew >= 5, "canvas sensors page drew too little: " .. drew)
 print("PASS: canvas sensors page draws " .. drew .. " text items")
 
 -- ============================================================== scenario 5 ====
--- the full screen telemetry window: size 3 (whole screen, keys work), it draws
--- with real course data, and it survives every key and a missing GPS
+-- the full screen telemetry window: size 4 ("other" in API 1.7 = whole screen
+-- with no firmware status bar), size 3 as the fallback. It draws with real
+-- course data, and it survives every key and a missing GPS
 resetStubs()
 runApp()
 assert(#telemetry > 0, "registerTelemetry was never called")
 local tel = telemetry[#telemetry]
-assert(tel.size == 3, "telemetry size is " .. tostring(tel.size) ..
-       ", expected 3 (full screen)")
+assert(tel.size == 4, "telemetry size is " .. tostring(tel.size) ..
+       ", expected 4 (whole screen, no status bar)")
 assert(type(tel.printFn) == "function", "telemetry has no printFunction")
 assert(type(tel.keyFn) == "function",
        "telemetry has no keyPressedFunction - keys only work on full screen")
 assert(#telButtons >= 5, "telemetry buttons not set: " .. #telButtons)
-print("PASS: telemetry registered full screen (size 3) with keys and 5 buttons")
+print("PASS: telemetry registered full screen (size 4) with keys and 5 buttons")
+
+-- if the firmware refuses size 4 it must fall back to 3 (bar at the bottom)
+resetStubs()
+local realReg = system.registerTelemetry
+system.registerTelemetry = function(no, label, size, printFn, keyFn)
+  if size == 4 then return nil end
+  return realReg(no, label, size, printFn, keyFn)
+end
+runApp()
+local fb = telemetry[#telemetry]
+assert(fb.size == 3, "fallback size is " .. tostring(fb.size) .. ", expected 3")
+assert(type(fb.keyFn) == "function", "fallback lost the key handler")
+print("PASS: size 4 refused -> falls back to size 3 with keys")
 
 -- drawing must work with no GPS, no course, and an odd canvas size
 local drew, filled = 0, 0

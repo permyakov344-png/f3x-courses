@@ -25,7 +25,7 @@ lua5.3 tools/test-bind.lua
 
 ## Что проверяется
 
-- `tools/test-app.lua` — **прогоняет настоящее `Apps/f3xc.lua`** на заглушках JETI API.
+- `tools/test-app.lua` — **прогоняет настоящее `Apps/F3x Courses.lua`** на заглушках JETI API.
   Ловит ровно тот класс ошибок, из-за которого приложение пропадает из меню:
   - `init()` не падает;
   - `system.registerForm` получает **функцию** init и **функцию** print
@@ -53,7 +53,7 @@ lua5.3 tools/test-bind.lua
   привязка по групповой строке `GPSLog3`; привязка без групповой строки (через `Latitude`);
   что посторонняя телеметрия (`UniS-E`) ничего не привязывает; что повторный вызов
   ничего не перезаписывает.
-- `luaparse` (синтаксис): `npx luaparse Apps/f3xc.lua` — ошибок быть не должно.
+- `luaparse` (синтаксис): `npx luaparse Apps/F3x Courses.lua` — ошибок быть не должно.
 
 ## Просмотр окна без передатчика
 
@@ -61,7 +61,7 @@ lua5.3 tools/test-bind.lua
 /tmp/node_modules/.bin/fengari tools/preview-telemetry.lua > /tmp/tel.svg
 ```
 
-Скрипт поднимает `Apps/f3xc.lua` на заглушках с придуманным курсом и GPS-фиксом и
+Скрипт поднимает `Apps/F3x Courses.lua` на заглушках с придуманным курсом и GPS-фиксом и
 рисует полноэкранное окно телеметрии в SVG: видно, как легли блоки, не наезжает ли
 текст, влезает ли подсказка. Готовые картинки — `docs/screens/f3xc-0.1.5-*.svg`.
 
