@@ -23,10 +23,10 @@ fi
 echo "Передатчик: $TX"
 mkdir -p "$TX/Apps/f3xc" 2>/dev/null || { echo "Нет прав на запись в $TX/Apps"; exit 1; }
 
-rm -f "$TX/Apps/f3xc.lua" "$TX/Apps/._f3xc.lua" 2>/dev/null
-cp "$REPO/Apps/F3x Courses.lua" "$TX/Apps/F3x Courses.lua" \
-  && echo "  скопировано: Apps/F3x Courses.lua" \
-  || echo "  ОШИБКА: Apps/F3x Courses.lua"
+rm -f "$TX/Apps/F3x Courses.lua" "$TX/Apps/._F3x Courses.lua" 2>/dev/null
+cp "$REPO/Apps/f3xc.lua" "$TX/Apps/f3xc.lua" \
+  && echo "  скопировано: Apps/f3xc.lua" \
+  || echo "  ОШИБКА: Apps/f3xc.lua"
 
 # диагностика ставится только по просьбе: каждое лишнее приложение занимает
 # один из 10 слотов активных приложений модели
@@ -47,7 +47,7 @@ echo
 echo "Готово."
 echo "  ВАЖНО: файл ещё НЕ добавлен в активные приложения модели."
 echo "  Menu -> Applications -> F3(Plus)  (откроется список доступных файлов)"
-echo "     -> выделить 'F3x Courses.lua' -> НАЖАТЬ КРУТИЛКУ (Enter)"
+echo "     -> выделить 'f3xc.lua' -> НАЖАТЬ КРУТИЛКУ (Enter)"
 echo "  Список Плюс сам ничего не добавляет - добавляет нажатие крутилки."
 echo "  Если активных уже 10 - в списке активных убрать лишнее через F4(Delete)."
 echo "  Затем Menu -> Applications -> 'F3X Courses' -> крутилка."

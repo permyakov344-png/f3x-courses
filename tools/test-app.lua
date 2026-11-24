@@ -1,4 +1,4 @@
--- Runs the real Apps/F3x Courses.lua with stubbed JETI API.
+-- Runs the real Apps/f3xc.lua with stubbed JETI API.
 --
 -- The bug this guards against: the app showed up only in the telemetry/sensor
 -- list and never in Menu -> Applications. A telemetry window is stored in the
@@ -154,8 +154,8 @@ local function resetStubs()
 end
 
 local function runApp()
-  local chunk, err = loadfile("Apps/F3x Courses.lua")
-  assert(chunk, "cannot load Apps/F3x Courses.lua: " .. tostring(err))
+  local chunk, err = loadfile("Apps/f3xc.lua")
+  assert(chunk, "cannot load Apps/f3xc.lua: " .. tostring(err))
   local app = chunk()
   assert(type(app) == "table", "app must return a table")
   assert(type(app.init) == "function", "app.init missing")
