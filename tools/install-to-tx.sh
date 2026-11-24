@@ -44,10 +44,12 @@ find "$TX/Apps" -maxdepth 1 -name "._f3xc*" -delete 2>/dev/null
 sync
 echo
 echo "Готово."
-echo "  ВАЖНО: файл ещё не активирован для модели."
-echo "  Menu -> Applications -> User Applications -> выделить 'F3X Courses' -> F3(Plus)"
-echo "  (активных приложений на модель максимум 10; лишние убираются F4 Delete)"
-echo "  Затем перезагрузить передатчик -> Menu -> Applications -> F3X Courses."
+echo "  ВАЖНО: файл ещё НЕ добавлен в активные приложения модели."
+echo "  Menu -> Applications -> F3(Plus)  (откроется список доступных файлов)"
+echo "     -> выделить 'f3xc.lua' -> НАЖАТЬ КРУТИЛКУ (Enter)"
+echo "  Список Плюс сам ничего не добавляет - добавляет нажатие крутилки."
+echo "  Если активных уже 10 - в списке активных убрать лишнее через F4(Delete)."
+echo "  Затем Menu -> Applications -> 'F3X Courses' -> крутилка."
 echo "  Журнал запуска: Apps/f3xc/lastrun.txt"
 echo
 echo "--- сенсоры, уже прописанные в моделях:"

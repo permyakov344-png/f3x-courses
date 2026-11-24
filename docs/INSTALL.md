@@ -21,26 +21,37 @@
 Файл `f3xc.lua` должен лежать **прямо в `Apps`**, а не в подкаталоге. Каталог `Apps/f3xc/`
 создаётся автоматически при первом запуске, если его нет.
 
-## 1a. Главное: приложение надо активировать для модели
+## 1a. Главное: приложение надо ДОБАВИТЬ в активные
 
 Скопированный файл — ещё не работающее приложение. В API 1.7, раздел
 «Loading the applications»:
 
-> every application […] must be activated in `Applications – User Applications`;
-> using the **F(3) “Plus”** button you can activate additional Lua applications
-> (**up to 10 can be active per model** at the same time).
+> The DC/DS-24 offers a simple overview of installed and active applications.
+> See the menu **Applications – User Applications**. […] Using the **F(3) “Plus”** button
+> you can activate additional Lua applications (**up to 10 can be active per model**
+> at the same time).
 
-Порядок:
+Ключевой момент, на котором легко застрять: **F3 (Plus) открывает список
+*доступных* файлов, а не активных приложений.** Само нажатие Плюса ничего не
+добавляет. В открывшемся списке надо:
 
-1. `Menu → Applications → User Applications`.
-2. Найти `F3X Courses`. Если он в списке неактивных — выделить и нажать **F3** (Plus).
-3. Если активных уже 10 — убрать лишнее кнопкой **F4** (Delete) для этой модели.
+1. выделить строку `f3xc.lua` крутилкой;
+2. **нажать саму крутилку** (Enter / кнопка 3D) — это и есть «добавить».
+
+Только после этого файл становится активным приложением модели и появляется
+в `Menu → Applications`.
+
+Порядок целиком:
+
+1. `Menu → Applications` → **F3 (Plus)** — откроется список доступных `.lua`/`.lc`.
+2. Выделить `f3xc.lua`, нажать **крутилку**.
+3. Если активных уже 10 — в списке активных выделить лишнее и нажать **F4 (Delete)**.
    Файл с карты при этом **не** удаляется, приложение просто выключено для модели.
-4. Перезагрузить передатчик.
+4. `Menu → Applications` → `F3X Courses` → крутилка. Приложение откроется.
 
-После перезагрузки в `Menu → Applications` появится пункт `F3X Courses`.
-Если его нет — см. `docs/TROUBLESHOOT-NO-MENU.md`: там разобраны причины и что
-смотреть в журнале `Apps/f3xc/lastrun.txt`.
+Перезагружать не обязательно: после добавления приложение запускается сразу.
+Если пункта так и нет — см. `docs/TROUBLESHOOT-NO-MENU.md`: там разобраны причины
+и что смотреть в журнале `Apps/f3xc/lastrun.txt`.
 
 ## 2. Установка с Windows
 
@@ -72,11 +83,12 @@ diskutil mount disk5s1
 
 ## 3. Первый запуск
 
-1. Выключить и включить передатчик (список Lua-приложений читается при загрузке).
-2. `Menu → Applications → F3X Courses`.
+1. Добавить приложение в активные — см. п. 1a (**F3 Plus** → выделить `f3xc.lua`
+   → нажать крутилку).
+2. `Menu → Applications → F3X Courses` → крутилка.
 3. Должна открыться форма с заголовком `F3X Courses 0.1.3`.
 
-Если пункта нет — см. раздел «Если не появилось».
+Если пункта нет — см. п. 1a и `docs/TROUBLESHOOT-NO-MENU.md`.
 
 ## 4. Привязка сенсоров
 
