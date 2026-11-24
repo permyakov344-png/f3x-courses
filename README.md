@@ -48,6 +48,7 @@ docs/
   TEST-CHECKLIST.md что проверить на передатчике после установки
   ROADMAP.md        план по шагам A–D
   SESSION.md        контекст для продолжения работы в новой сессии
+  SENSOR-NOTES.md   разбор сенсоров (RCGPS-F3x/Slim), задержки и протокола JETI EX
   PROGRESS.md       журнал изменений
 ```
 
