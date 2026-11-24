@@ -89,7 +89,48 @@ offset = speed / 6 * (speedFaktorF3F / 100)     -- при 150 км/ч ≈ 6.94 �
 надо делать **в секундах (0.00–0.30 с)**, а не в процентах — тогда число имеет
 физический смысл: «сколько секунд отстаёт телеметрия». При 70 м/с 0.1 с = 7 м.
 
-## 6. Практический вывод
+## 6. Фактический сенсор (проверено по карте передатчика)
+
+Уточнено 24.11.2026 с реального DS-24 II (прошивка 6.06, модель `0005PIKE.jsn`):
+
+**Датчик — `GPSLog3`** (JETI GPS Logger 3). ID сенсора `823632641`.
+Параметры в телеметрии модели:
+
+| Значение | Label | Param | Unit | DataType |
+|---|---|---|---|---|
+| Latitude | `Latitude` | 3 | LAT | 9 |
+| Longitude | `Longitude` | 4 | LON | 9 |
+| Speed | `Speed` | 5 | kmh | 0 |
+| Flight Dir. | `Flight Dir.` | 9 | ° | 1 |
+| Satellites | `Satellites` | 14 | SAT | 0 |
+| Time | `Time` | 1 | — | 5 |
+
+Дополнительно в той же модели висит `UniS-E` (ID `809083650`): Voltage, Current,
+Capacity, RX voltage, Altitude, Vario, Rem. Cap. — это не GPS, для F3X Courses не нужен.
+
+**Скорость в км/ч**, не в м/с. Для гейтов надо делить на 3.6 — записать в шаг C.
+
+F3F Tool на этой модели был настроен так (секция `Lua-Props` в `.jsn`):
+
+```
+latSensor=823632641, latSensorParam=3
+lonSensor=823632641, lonSensorParam=4
+speedSensor=823632641, speedSensorParam=5
+headingSensor=823632641, headingSensorParam=9
+f3bDistance=150, f3fDistance=100, f3bMode=2
+```
+
+То есть привязка полностью совпадает с тем, что зашито в `KNOWN` в `f3xc.lua`.
+Глобальный курс F3F Tool (`Apps/f3fTool-21/slopeData.jsn`):
+
+```json
+{"homeLat":56.66335,"homeLon":60.59389,"bearing":312.2015,"mode":2,"aBase":1}
+```
+
+Это Екатеринбург, дома. `bearing 312.2°` — направление линии того курса; как есть
+в наш курс не переносим, курсы создаются заново на поле (шаг B).
+
+## 7. Практический вывод
 
 Покупать **сейчас** — нет смысла: сначала надо понять, что мешает именно вам.
 Решение по фактам, а не по обещаниям:
@@ -105,7 +146,7 @@ offset = speed / 6 * (speedFaktorF3F / 100)     -- при 150 км/ч ≈ 6.94 �
 борт на 4.8 В NiMH или на 5 В BEC — RCGPS-Slim будет **вне допуска**, нужен свой
 аккумулятор или отвод от 2S.
 
-## 7. Источники
+## 8. Источники
 
 - https://www.cassini.vision/projects/rcgps-f3x
 - https://www.cassini.vision/projects/rcgps-f3x-slim

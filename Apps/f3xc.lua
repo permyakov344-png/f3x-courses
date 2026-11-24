@@ -27,7 +27,7 @@
 -- ###############################################################################################
 
 local appName    = "F3X Courses"
-local appVersion = "0.1.0"
+local appVersion = "0.1.1"
 local appAuthor  = "permyakov344-png"
 
 local dataDir   = "Apps/f3xc"
@@ -196,9 +196,52 @@ local function indexOfSensor(which)
   return 1
 end
 
+-- known GPS sensors: group label -> param of lat / lon / speed / heading
+-- GPSLog3 is the JETI GPS Logger 3; params taken from a real DS-24 II model file
+local KNOWN = {
+  { name = "gpslog3", lat = 3, lon = 4, spd = 5, hdg = 9 },
+}
+
+-- bind by the exact sensor/param known for a GPS we have seen in the field.
+-- Returns how many of the four values were bound.
+local function bindKnownProfile()
+  local ok, all = pcall(system.getSensors)
+  if not ok or type(all) ~= "table" then return 0 end
+
+  -- find group rows (param == 0) whose label matches a known sensor
+  for _, g in ipairs(all) do
+    if g.param == 0 and g.id then
+      local low = string.lower(tostring(g.label or ""))
+      for _, k in ipairs(KNOWN) do
+        if low == k.name then
+          for _, e in ipairs(all) do
+            if e.id == g.id and e.param ~= 0 then
+              local pick
+              if e.param == k.lat then pick = "lat"
+              elseif e.param == k.lon then pick = "lon"
+              elseif e.param == k.spd then pick = "spd"
+              elseif e.param == k.hdg then pick = "hdg" end
+              if pick and not bound(pick) then
+                sens[pick].id, sens[pick].param = e.id, e.param
+                saveSensorCfg(pick)
+              end
+            end
+          end
+          return 1
+        end
+      end
+    end
+  end
+  return 0
+end
+
 -- one-time guess: pick plausible index for each of the four values
 local function guessSensors()
   if #sensorMap < 2 then return end
+
+  -- a GPS we know by name beats any heuristic
+  bindKnownProfile()
+
   local keys = {
     lat = { "lat" },
     lon = { "lon" },
