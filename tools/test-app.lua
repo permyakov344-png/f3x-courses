@@ -12,10 +12,12 @@
 
 -- ------------------------------------------------------------------ stubs ----
 local formCalls, registered, logFiles, params, sensors
+local telemetry, telButtons
 local curLog, strictReg, failSetTitle, refuseWidgets
 
 local function resetStubs()
   formCalls, registered, logFiles, params = {}, {}, {}, {}
+  telemetry, telButtons = {}, {}
   curLog, strictReg, failSetTitle, refuseWidgets = nil, false, false, false
 
   sensors = {
@@ -65,7 +67,10 @@ local function resetStubs()
     getFgColor = function() return 0 end,
     setColor   = function() end,
     drawText   = function() end,
-    getTextWidth = function() return 10 end,
+    drawLine   = function() end,
+    drawRectangle = function() end,
+    drawFilledRectangle = function() end,
+    getTextWidth = function(font, text) return #tostring(text) * 7 end,
   }
 
   gps = {
@@ -73,6 +78,7 @@ local function resetStubs()
     getValue    = function() return nil end,
     newPoint    = function(la, lo) return { la, lo } end,
     getDistance = function() return 0 end,
+    getBearing  = function() return 0 end,
   }
 
   system = {
@@ -86,7 +92,14 @@ local function resetStubs()
     playFile       = function() end,
     messageBox     = function() end,
     exitScript     = function() end,
-    registerTelemetry = function() return 1 end,
+    registerTelemetry = function(no, label, size, printFn, keyFn)
+      telemetry[#telemetry + 1] = { no = no, label = label, size = size,
+                                    printFn = printFn, keyFn = keyFn }
+      return no
+    end,
+    setTelemetryButton = function(no, btn, text, state)
+      telButtons[#telButtons + 1] = { no = no, btn = btn, text = text, state = state }
+    end,
     registerControl   = function() return 1 end,
     setControl        = function() end,
     -- the interesting one
@@ -293,5 +306,73 @@ lcd.drawText = realDrawText
 assert(ok, "canvas sensors page raised: " .. tostring(e))
 assert(drew >= 5, "canvas sensors page drew too little: " .. drew)
 print("PASS: canvas sensors page draws " .. drew .. " text items")
+
+-- ============================================================== scenario 5 ====
+-- the full screen telemetry window: size 3 (whole screen, keys work), it draws
+-- with real course data, and it survives every key and a missing GPS
+resetStubs()
+runApp()
+assert(#telemetry > 0, "registerTelemetry was never called")
+local tel = telemetry[#telemetry]
+assert(tel.size == 3, "telemetry size is " .. tostring(tel.size) ..
+       ", expected 3 (full screen)")
+assert(type(tel.printFn) == "function", "telemetry has no printFunction")
+assert(type(tel.keyFn) == "function",
+       "telemetry has no keyPressedFunction - keys only work on full screen")
+assert(#telButtons >= 5, "telemetry buttons not set: " .. #telButtons)
+print("PASS: telemetry registered full screen (size 3) with keys and 5 buttons")
+
+-- drawing must work with no GPS, no course, and an odd canvas size
+local drew, filled = 0, 0
+local realText, realFill = lcd.drawText, lcd.drawFilledRectangle
+lcd.drawText = function() drew = drew + 1; return realText() end
+lcd.drawFilledRectangle = function() filled = filled + 1; return realFill() end
+for _, size in ipairs({ { 320, 240 }, { 800, 480 }, { 320, 120 }, { 200, 90 } }) do
+  ok, e = pcall(tel.printFn, size[1], size[2])
+  assert(ok, "telemetry printFunction raised at " .. size[1] .. "x" .. size[2] ..
+         ": " .. tostring(e))
+end
+lcd.drawText, lcd.drawFilledRectangle = realText, realFill
+assert(drew >= 10, "telemetry drew too little text: " .. drew)
+assert(filled >= 5, "telemetry drew no panels: " .. filled)
+print("PASS: telemetry draws " .. drew .. " texts, " .. filled ..
+      " panels at 4 canvas sizes")
+
+-- every key must be safe, including unknown ones
+for _, key in ipairs({ KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_ENTER, KEY_ESC,
+                       KEY_UP, KEY_DOWN, KEY_RELEASED, 999, -1 }) do
+  ok, e = pcall(tel.keyFn, key)
+  assert(ok, "telemetry key handler raised on key " .. tostring(key) .. ": " ..
+         tostring(e))
+end
+print("PASS: telemetry key handler survives every key")
+
+-- with a complete course and a GPS fix the window must show both bases
+resetStubs()
+runApp()
+-- pretend the card holds this course
+io.readall = function() return "{}" end
+json = {
+  encode = function() return "{}" end,
+  decode = function()
+    return { active = 1, courses = { {
+      name = "Test course", typ = "F3B", dist = 150,
+      aLat = 50.1, aLon = 14.2, bLat = 50.101, bLon = 14.203,
+    } } }
+  end,
+}
+local app2 = runApp()
+tel = telemetry[#telemetry]        -- the instance that loaded the course
+local seen = {}
+lcd.drawText = function(x, y, t) seen[#seen + 1] = tostring(t) end
+ok, e = pcall(tel.printFn, 800, 480)
+lcd.drawText = realText
+assert(ok, "telemetry raised with a course: " .. tostring(e))
+local blob = table.concat(seen, "\n")
+
+assert(blob:find("Test course"), "active course name not drawn:\n" .. blob)
+assert(blob:find("LINE A%-B"), "no line gauge drawn:\n" .. blob)
+assert(blob:find("SENSORS"), "no sensor status drawn:\n" .. blob)
+print("PASS: telemetry shows the course, the A-B gauge and the sensor status")
 
 print("\nall app tests passed")

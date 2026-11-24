@@ -86,7 +86,7 @@ diskutil mount disk5s1
 1. Добавить приложение в активные — см. п. 1a (**F3 Plus** → выделить `f3xc.lua`
    → нажать крутилку).
 2. `Menu → Applications → F3X Courses` → крутилка.
-3. Должна открыться форма с заголовком `F3X Courses 0.1.3`.
+3. Должна открыться форма с заголовком `F3X Courses 0.1.4`.
 
 Если пункта нет — см. п. 1a и `docs/TROUBLESHOOT-NO-MENU.md`.
 

@@ -1,6 +1,6 @@
 -- ###############################################################################################
 -- #  F3X Courses  -  course manager / base-line helper for JETI DC/DS transmitters
--- #  Version 0.1.3  (step A: skeleton, single menu, JSON course storage)
+-- #  Version 0.1.4  (step A + full screen telemetry: bases A/B, A-B line, live state)
 -- #
 -- #  Author of this app:  permyakov344-png
 -- #
@@ -27,7 +27,7 @@
 -- ###############################################################################################
 
 local appName    = "F3X Courses"
-local appVersion = "0.1.3"
+local appVersion = "0.1.4"
 local appAuthor  = "permyakov344-png"
 
 local dataDir   = "Apps/f3xc"
@@ -46,7 +46,6 @@ local sens = { lat = {}, lon = {}, spd = {}, hdg = {} }
 local sensorMap = {}                     -- index -> {id=, param=, label=}
 local sensorList = {}                    -- labels for the selectbox
 local scrW, scrH = 0, 0
-local distToA, distToAtime = nil, 0    -- cached distance to base A (avoids heavy math in the draw loop)
 
 -- -----------------------------------------------------------------------------------------------
 -- small helpers
@@ -275,68 +274,479 @@ local function guessSensors()
 end
 
 -- -----------------------------------------------------------------------------------------------
--- telemetry window
+-- telemetry window: full screen, bases A/B, line deviation, live diagnostics
+-- size 3 reserves the whole screen (status bar stays at the bottom left) and is
+-- the only size that also receives key presses        -- API 1.7, registerTelemetry
+-- -----------------------------------------------------------------------------------------------
+local TL = {
+  bg     = {  10,  14,  18 },
+  panel  = {  26,  32,  40 },
+  panel2 = {  36,  44,  54 },
+  edge   = {  58,  70,  84 },
+  text   = { 236, 240, 244 },
+  dim    = { 136, 146, 158 },
+  ok     = {  62, 200, 112 },
+  warn   = { 246, 190,  62 },
+  bad    = { 236,  86,  86 },
+  accent = {   0, 198, 255 },
+}
+
+local function tlColor(c) lcd.setColor(c[1], c[2], c[3]) end
+
+local function tlFill(x, y, w, h, c)
+  if w <= 0 or h <= 0 then return end
+  tlColor(c)
+  lcd.drawFilledRectangle(math.floor(x), math.floor(y),
+                          math.floor(w), math.floor(h))
+end
+
+local function tlFrame(x, y, w, h, c)
+  if w <= 0 or h <= 0 then return end
+  tlColor(c)
+  lcd.drawRectangle(math.floor(x), math.floor(y),
+                    math.floor(w), math.floor(h))
+end
+
+local function tlText(x, y, text, font, c)
+  tlColor(c or TL.text)
+  lcd.drawText(math.floor(x), math.floor(y), tostring(text), font or FONT_NORMAL)
+end
+
+local function tlWidth(text, font)
+  local ok, r = pcall(lcd.getTextWidth, font or FONT_NORMAL, tostring(text))
+  if ok and type(r) == "number" then return r end
+  return #tostring(text) * 7
+end
+
+local function tlTextRight(xr, y, text, font, c)
+  tlText(xr - tlWidth(text, font), y, text, font, c)
+end
+
+local function tlTextCenter(x, w, y, text, font, c)
+  tlText(x + (w - tlWidth(text, font)) / 2, y, text, font, c)
+end
+
+local function tlDivider(x, y, w, c)
+  tlColor(c or TL.edge)
+  lcd.drawLine(math.floor(x), math.floor(y), math.floor(x + w), math.floor(y))
+end
+-- -----------------------------------------------------------------------------------------------
+-- live telemetry state (recomputed at most every 400 ms, drawing is on a timer)
+-- -----------------------------------------------------------------------------------------------
+local T = {
+  la = nil, lo = nil, fix = false, fixAge = -1,
+  spd = nil, hdg = nil, alt = nil,
+  dA = nil, brgA = nil, dB = nil, brgB = nil,
+  off = nil, along = nil,          -- deviation from the A->B line, metres
+  at = 0,
+}
+
+local TEL_PERIOD = 400
+
+-- short-lived toast for key actions (declared before the drawer uses it)
+local telMsg, telMsgUntil = "", 0
+
+local function geoDist(la1, lo1, la2, lo2)
+  local ok, d = pcall(function()
+    return gps.getDistance(gps.newPoint(la1, lo1), gps.newPoint(la2, lo2))
+  end)
+  if ok and type(d) == "number" then return d end
+  -- fallback: haversine
+  local rad = math.pi / 180
+  local dLa = (la2 - la1) * rad
+  local dLo = (lo2 - lo1) * rad
+  local a = math.sin(dLa / 2) ^ 2 +
+            math.cos(la1 * rad) * math.cos(la2 * rad) * math.sin(dLo / 2) ^ 2
+  if a < 0 then a = 0 end
+  if a > 1 then a = 1 end
+  return 111320 * 2 * math.atan(math.sqrt(a), math.sqrt(1 - a))
+end
+
+local function geoBrg(la1, lo1, la2, lo2)
+  local ok, b = pcall(function()
+    return gps.getBearing(gps.newPoint(la1, lo1), gps.newPoint(la2, lo2))
+  end)
+  if ok and type(b) == "number" then return b % 360 end
+  local rad = math.pi / 180
+  local dLo = (lo2 - lo1) * rad
+  local y = math.sin(dLo) * math.cos(la2 * rad)
+  local x = math.cos(la1 * rad) * math.sin(la2 * rad) -
+            math.sin(la1 * rad) * math.cos(la2 * rad) * math.cos(dLo)
+  return (math.atan(y, x) / rad) % 360
+end
+
+-- position of the model relative to the A->B baseline:
+--   off   = signed perpendicular distance, metres (+ = right of A->B direction)
+--   along = distance already covered from A towards B
+local function baselineOffset(c, la, lo)
+  if not (c and c.aLat and c.aLon and c.bLat and c.bLon and la) then return nil, nil end
+  local brg = geoBrg(c.aLat, c.aLon, c.bLat, c.bLon)
+  local brgP = geoBrg(c.aLat, c.aLon, la, lo)
+  local dAP = geoDist(c.aLat, c.aLon, la, lo)
+  local rad = math.pi / 180
+  local dAng = (brgP - brg) * rad
+  return dAP * math.sin(dAng), dAP * math.cos(dAng)
+end
+
+local function updateTelemetry()
+  local now = system.getTimeCounter()
+  if now - T.at < TEL_PERIOD then return end
+  T.at = now
+
+  local la, lo = currentPos()
+  if la then
+    if not T.fix or T.la ~= la or T.lo ~= lo then T.fixAge = 0 end
+    T.fix = true
+    T.la, T.lo = la, lo
+    if T.fixAge >= 0 then T.fixAge = T.fixAge + TEL_PERIOD end
+  else
+    T.fix = false
+    T.la, T.lo = nil, nil
+    T.fixAge = -1
+  end
+
+  T.spd = sensorValue("spd")
+  T.hdg = sensorValue("hdg")
+
+  local c = activeCourse()
+  T.dA, T.brgA, T.dB, T.brgB, T.off, T.along = nil, nil, nil, nil, nil, nil
+
+  if la and c then
+    if c.aLat and c.aLon then
+      T.dA   = geoDist(la, lo, c.aLat, c.aLon)
+      T.brgA = geoBrg(la, lo, c.aLat, c.aLon)
+    end
+    if c.bLat and c.bLon then
+      T.dB   = geoDist(la, lo, c.bLat, c.bLon)
+      T.brgB = geoBrg(la, lo, c.bLat, c.bLon)
+    end
+    T.off, T.along = baselineOffset(c, la, lo)
+  end
+end
+
+-- what is missing for a course, in plain words, with a colour
+local function sensorsBoundCount()
+  local n = 0
+  for _, k in ipairs({ "lat", "lon", "spd", "hdg" }) do
+    if bound(k) then n = n + 1 end
+  end
+  return n
+end
+-- -----------------------------------------------------------------------------------------------
+-- drawing blocks
+-- -----------------------------------------------------------------------------------------------
+local function fmtDist(d)
+  if d == nil then return "--" end
+  if d >= 1000 then return string.format("%.2f km", d / 1000) end
+  return string.format("%.1f m", d)
+end
+
+local function fmtBearing(b)
+  if b == nil then return "--" end
+  return string.format("%03.0f", b % 360)
+end
+
+-- compass letter for a bearing, so the number reads at a glance
+local function brgLetter(b)
+  if b == nil then return "?" end
+  local dirs = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+  local i = math.floor((b % 360) / 45 + 0.5) % 8 + 1
+  return dirs[i]
+end
+
+local function drawHeader(x, y, w)
+  local c = activeCourse()
+  local name = c and tostring(c.name) or "no active course"
+  tlFill(x, y, w, 26, TL.panel)
+  tlFill(x, y, 4, 26, c and TL.accent or TL.bad)
+  tlText(x + 10, y + 5, name, FONT_BOLD, TL.text)
+
+  local pillW = 92
+  local px = x + w - pillW - 6
+  tlFill(px, y + 4, pillW, 18, T.fix and TL.ok or TL.bad)
+  tlTextCenter(px, pillW, y + 6, T.fix and "GPS OK" or "GPS LOST",
+               FONT_BOLD, TL.bg)
+end
+
+-- one base tile: A or B
+local function drawBaseTile(x, y, w, h, letter, c, dist, brg, which)
+  local has = c and c[which .. "Lat"] and c[which .. "Lon"]
+  tlFill(x, y, w, h, TL.panel)
+  tlFrame(x, y, w, h, has and TL.edge or TL.warn)
+
+  local badge = 28
+  tlFill(x + 7, y + 7, badge, badge, has and TL.accent or TL.warn)
+  tlTextCenter(x + 7, badge, y + 11, letter, FONT_BIG, TL.bg)
+
+  local tx = x + 7 + badge + 7
+  if has then
+    tlText(tx, y + 4, fmtDist(dist), FONT_BIG, TL.text)
+    tlText(tx, y + 28,
+           (brg and (brgLetter(brg) .. " " .. fmtBearing(brg) .. " deg")) or "--",
+           FONT_NORMAL, TL.accent)
+    tlText(tx, y + 46, string.format("%.5f", c[which .. "Lat"]), FONT_MINI, TL.dim)
+    tlText(tx, y + 58, string.format("%.5f", c[which .. "Lon"]), FONT_MINI, TL.dim)
+  else
+    tlText(tx, y + 6, "not set", FONT_BOLD, TL.warn)
+    tlText(tx, y + 28, which == "a" and "press New here" or "step B: wizard",
+           FONT_MINI, TL.dim)
+  end
+end
+-- deviation from the A->B line: a bar with the centre at zero
+local GAUGE_RANGE = 30      -- metres shown either side of the line
+
+local function drawGauge(x, y, w, h, off, along, c)
+  tlFill(x, y, w, h, TL.panel)
+
+  local has = (off ~= nil)
+  local title = "LINE A-B"
+  local value, color, word
+  if not (c and c.aLat and c.bLat) then
+    value, color, word = "--", TL.dim, "set both bases"
+  elseif not T.fix then
+    value, color, word = "--", TL.dim, "no GPS fix"
+  elseif has then
+    if math.abs(off) < 0.5 then
+      word = "ON LINE"
+      color = TL.ok
+    elseif off > 0 then
+      word = "RIGHT"
+      color = TL.warn
+    else
+      word = "LEFT"
+      color = TL.warn
+    end
+    value = string.format("%.1f m", math.abs(off))
+  else
+    value, color, word = "--", TL.dim, "no data"
+  end
+
+  tlText(x + 8, y + 4, title, FONT_MINI, TL.dim)
+  tlText(x + 8, y + 14, word, FONT_BOLD, color)
+  tlTextRight(x + w - 8, y + 12, value, FONT_BIG, color)
+
+  -- distance covered along the line, in the title row, clear of the bar
+  if along and c and c.dist then
+    tlTextRight(x + w - 8, y + 4,
+                string.format("%.0f / %.0f m", along, tonumber(c.dist) or 0),
+                FONT_MINI, TL.dim)
+  end
+
+  -- bar geometry
+  local bx, bw = x + 8, w - 16
+  local by = y + h - 26
+  if bw < 40 or by < y + 30 then return end
+
+  tlFill(bx, by, bw, 8, TL.panel2)
+  -- centre tick = the line itself
+  tlFill(bx + bw / 2 - 1, by - 3, 2, 14, TL.accent)
+
+  if has then
+    local clamped = off
+    if clamped > GAUGE_RANGE then clamped = GAUGE_RANGE end
+    if clamped < -GAUGE_RANGE then clamped = -GAUGE_RANGE end
+    local px = bx + bw / 2 + (clamped / GAUGE_RANGE) * (bw / 2)
+    tlFill(px - 3, by - 2, 6, 12, color)
+  end
+
+  -- scale marks so the bar has a meaning
+  tlText(bx, by + 10, "-" .. GAUGE_RANGE, FONT_MINI, TL.dim)
+  tlTextCenter(bx, bw, by + 10, "0", FONT_MINI, TL.dim)
+  tlTextRight(bx + bw, by + 10, "+" .. GAUGE_RANGE .. " m", FONT_MINI, TL.dim)
+end
+
+-- bottom strip: sensor chips + speed/heading, so a missing piece is obvious
+local function drawStatus(x, y, w, h)
+  tlFill(x, y, w, h, TL.panel)
+  local rowY = y + 6
+
+  local okFix = T.fix
+  tlFill(x + 6, rowY, 56, 18, okFix and TL.ok or TL.bad)
+  tlTextCenter(x + 6, 56, rowY + 2, okFix and "FIX" or "NO FIX", FONT_MINI, TL.bg)
+
+  local spd = T.spd
+  tlText(x + 68, rowY + 2,
+         spd and string.format("%.1f km/h", spd) or "spd --", FONT_NORMAL,
+         spd and TL.text or TL.dim)
+
+  local hdg = T.hdg
+  tlText(x + 168, rowY + 2,
+         hdg and string.format("%03.0f deg %s", hdg, brgLetter(hdg)) or "dir --",
+         FONT_NORMAL, hdg and TL.text or TL.dim)
+
+  -- binding summary: how many of the four values are bound
+  local n = sensorsBoundCount()
+  local col = (n >= 4) and TL.ok or ((n >= 2) and TL.warn or TL.bad)
+  local label = string.format("SENSORS %d/4", n)
+  tlTextRight(x + w - 8, rowY + 2, label, FONT_MINI, col)
+end
+-- the one line that tells you what to do next; a key action's toast takes it over
+local function nextHint(c)
+  if not (bound("lat") and bound("lon")) then
+    return "No GPS bound: F3 to bind, or Menu > Applications > F3X Courses > Sensors", TL.bad
+  end
+  if not T.fix then
+    return "GPS bound, waiting for a fix (model on, receiver linked)", TL.warn
+  end
+  if not c then
+    return "No active course: F1 makes a new one at this position", TL.warn
+  end
+  if not (c.aLat and c.aLon) then
+    return "Base A is empty: stand on A and press F1", TL.warn
+  end
+  if not (c.bLat and c.bLon) then
+    return "Base B is empty: step B (A/B wizard) is not built yet", TL.warn
+  end
+  if T.off == nil then
+    return "Both bases set, waiting for a position to compute the line", TL.dim
+  end
+  return "Ready: distance to A, bearing to A and the A-B line are live", TL.ok
+end
+
+local function drawHint(x, y, w, c)
+  local text, color
+  if #telMsg > 0 and system.getTimeCounter() < telMsgUntil then
+    text, color = telMsg, TL.accent
+  else
+    text, color = nextHint(c)
+  end
+  tlFill(x, y, w, 16, TL.panel2)
+  tlText(x + 6, y + 3, text, FONT_MINI, color)
+end
+
+-- -----------------------------------------------------------------------------------------------
+-- full screen layout: two base tiles on top, line gauge, status strip
 -- -----------------------------------------------------------------------------------------------
 local function drawTelemetryBody(w, h)
   scrW, scrH = w, h
-  local y, dy = 6, 20
-  local function line(text, font)
-    if y + dy > h then return end
-    lcd.drawText(4, y, text, font or FONT_NORMAL)
-    y = y + dy
-  end
-
-  lcd.setColor(lcd.getFgColor())
-  line(appName .. " " .. appVersion, FONT_BOLD)
-  y = y + 4
-
+  updateTelemetry()
   local c = activeCourse()
-  if c then
-    line("ACTIVE  " .. tostring(c.name), FONT_BOLD)
-    line(string.format("%s  %.0f m", tostring(c.typ), tonumber(c.dist) or 0))
-    if c.brg then
-      line(string.format("bearing %.0f deg", c.brg))
-    else
-      line("bearing  -- (step B)")
+
+  tlFill(0, 0, w, h, TL.bg)
+
+  -- size 3 keeps the transmitter status bar at the bottom left: reserve it
+  local bottom = (h >= 200) and 22 or 4
+  local pad = 5
+  local avail = h - bottom
+
+  drawHeader(pad, pad, w - pad * 2)
+
+  local gap = 5
+  local y = pad + 26 + gap
+  local tileH = 74
+  local gaugeH = 62
+  local statusH = 26
+  local hintH = 16
+
+  -- shrink gracefully: gauge first, then the tiles, then drop the hint line
+  local room = avail - y - pad
+  local tileH, gaugeH, statusH, hintH = 74, 62, 26, 16
+  local need = tileH + gap + gaugeH + gap + statusH + gap + hintH
+  if room < need then
+    local short = need - room
+    local cut = math.min(short, gaugeH - 44)          -- 1) shorter gauge
+    gaugeH = gaugeH - cut
+    short = short - cut
+    if short > 0 then
+      local cut2 = math.min(short, tileH - 46)        -- 2) shorter tiles
+      tileH = tileH - cut2
+      short = short - cut2
     end
-  else
-    line("no course", FONT_BOLD)
+    if short > 0 then hintH = 0 end                   -- 3) no hint line
   end
 
-  y = y + 4
-  local la, lo = currentPos()
-  if la then
-    line(string.format("GPS  %.5f", la))
-    line(string.format("     %.5f", lo))
-    if c and c.aLat and c.aLon then
-      local now = system.getTimeCounter()
-      if distToA == nil or now - distToAtime > 1000 then
-        distToAtime = now
-        local ok, d = pcall(function()
-          return gps.getDistance(gps.newPoint(c.aLat, c.aLon), gps.newPoint(la, lo))
-        end)
-        distToA = (ok and d) and d or -1
-      end
-      if distToA and distToA >= 0 then line(string.format("to A %.1f m", distToA)) end
-    else
-      line("A not set yet")
-    end
-  else
-    line("GPS  no fix / not bound")
+  local tileW = (w - pad * 2 - gap) / 2
+  drawBaseTile(pad, y, tileW, tileH, "A", c, T.dA, T.brgA, "a")
+  drawBaseTile(pad + tileW + gap, y, tileW, tileH, "B", c, T.dB, T.brgB, "b")
+  y = y + tileH + gap
+
+  if gaugeH >= 44 then
+    drawGauge(pad, y, w - pad * 2, gaugeH, T.off, T.along, c)
+    y = y + gaugeH + gap
   end
 
-  local spd = sensorValue("spd")
-  if spd then line(string.format("speed %.1f", spd)) end
-  line(string.format("courses %d   active %d", #S.courses, S.active))
+  drawStatus(pad, y, w - pad * 2, statusH)
+  y = y + statusH + gap
+
+  if hintH > 0 then
+    drawHint(pad, y, w - pad * 2, c)
+  end
 end
 
 -- telemetry windows are drawn on a timer; never let a runtime error kill the widget
+local telLastErr = nil
 local function drawTelemetry(w, h)
-  local ok = pcall(drawTelemetryBody, w, h)
+  local ok, err = pcall(drawTelemetryBody, w, h)
   if not ok then
-    lcd.setColor(lcd.getFgColor())
-    lcd.drawText(4, 6, appName, FONT_BOLD)
-    lcd.drawText(4, 30, "draw error", FONT_NORMAL)
+    telLastErr = tostring(err)
+    pcall(function()
+      tlFill(0, 0, w, h, TL.bg)
+      tlText(6, 6, appName .. " " .. appVersion, FONT_BOLD, TL.text)
+      tlText(6, 30, "draw error", FONT_BOLD, TL.bad)
+      tlText(6, 50, telLastErr:sub(1, 60), FONT_MINI, TL.dim)
+    end)
+  end
+end
+
+-- keys of the full screen telemetry window (API 1.7: only size 3+ gets keys)
+local function telSay(text)
+  telMsg = tostring(text)
+  telMsgUntil = system.getTimeCounter() + 2500
+end
+
+local function keyTelemetryBody(key)
+  if key == KEY_1 then                        -- new course from here
+    local la, lo = currentPos()
+    if not la then
+      beep(2, 500, 250)
+      telSay("no GPS fix")
+      return
+    end
+    local c = newCourse(string.format("Course %d", #S.courses + 1))
+    c.aLat, c.aLon = la, lo
+    S.courses[#S.courses + 1] = c
+    S.active = #S.courses
+    saveCourses()
+    beep(0, 600, 650)
+    telSay(string.format("new course, A = %.5f %.5f", la, lo))
+
+  elseif key == KEY_2 then                    -- next course
+    if #S.courses > 1 then
+      S.active = S.active % #S.courses + 1
+      saveCourses()
+      beep(0, 400, 700)
+      telSay("course " .. S.active .. ": " .. tostring(activeCourse().name))
+    else
+      telSay("only one course")
+    end
+
+  elseif key == KEY_3 then                    -- rebind sensors from live telemetry
+    buildSensorList()
+    sens.lat.id, sens.lat.param = nil, nil
+    local ok = pcall(guessSensors)
+    beep(ok and 0 or 2, 400, ok and 800 or 300)
+    telSay(string.format("sensors %d/4 bound", sensorsBoundCount()))
+
+  elseif key == KEY_4 then                    -- reload the course list from card
+    loadCourses()
+    beep(0, 400, 500)
+    telSay(string.format("reloaded, %d courses", #S.courses))
+
+  elseif key == KEY_5 or key == KEY_ENTER then -- save
+    if saveCourses() then
+      beep(0, 400, 700)
+      telSay("saved")
+    else
+      beep(2, 500, 300)
+      telSay("save failed")
+    end
+  end
+end
+
+local function keyTelemetry(key)
+  local ok, err = pcall(keyTelemetryBody, key)
+  if not ok then
+    telSay("key error: " .. tostring(err))
   end
 end
 
@@ -878,8 +1288,23 @@ local function initBody()
   -- would leave the app reachable only from the telemetry screen list
   local registered = registerFormAnywhere()
 
-  local okT, retT = pcall(system.registerTelemetry, 1, appName, 2, drawTelemetry)
-  log("registerTelemetry -> ok=" .. tostring(okT) .. " ret=" .. tostring(retT))
+  -- size 3 = the whole screen, and the only size that also passes key presses
+  local okT, retT = pcall(system.registerTelemetry, 1, appName, 3, drawTelemetry,
+                          keyTelemetry)
+  log("registerTelemetry(3) -> ok=" .. tostring(okT) .. " ret=" .. tostring(retT))
+  if not (okT and retT) then
+    local okT2, retT2 = pcall(system.registerTelemetry, 1, appName, 2, drawTelemetry)
+    log("registerTelemetry(2) -> ok=" .. tostring(okT2) .. " ret=" .. tostring(retT2))
+  end
+
+  -- button labels of the full screen window (V6.05+, has no effect on small ones)
+  if okT and retT then
+    local labels = { "New", "Next", "Bind", "Reload", "Save" }
+    for i, text in ipairs(labels) do
+      local okB = pcall(system.setTelemetryButton, 1, i, text, ENABLED)
+      if not okB then log("setTelemetryButton(" .. i .. ") failed") break end
+    end
+  end
 
   if not registered then
     log("FORM NOT REGISTERED")
