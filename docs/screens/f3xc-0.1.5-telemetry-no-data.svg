@@ -26,8 +26,8 @@
 <rect x="11" y="172" width="56" height="18" fill="rgb(236,86,86)" fill-opacity="1.00"/>
 <text x="31" y="182" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(10,14,18)">НЕТ</text>
 <text x="73" y="184" font-family="Helvetica,Arial,sans-serif" font-size="10" font-weight="normal" fill="rgb(236,240,244)">27.4 км/ч</text>
-<text x="173" y="184" font-family="Helvetica,Arial,sans-serif" font-size="10" font-weight="normal" fill="rgb(236,240,244)">041° СВ</text>
 <text x="247" y="182" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(246,190,62)">ДАТЧИКИ 2/4</text>
+<text x="173" y="184" font-family="Helvetica,Arial,sans-serif" font-size="10" font-weight="normal" fill="rgb(236,240,244)">041° СВ</text>
 <rect x="5" y="197" width="310" height="16" fill="rgb(36,44,54)" fill-opacity="1.00"/>
 <text x="11" y="208" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="normal" fill="rgb(236,86,86)">GPS не привязан: нажмите F3</text>
 </svg>

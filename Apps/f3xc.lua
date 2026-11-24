@@ -569,16 +569,27 @@ local function drawStatus(x, y, w, h)
          spd and string.format("%.1f км/ч", spd) or "скор --", FONT_NORMAL,
          spd and TL.text or TL.dim)
 
-  local hdg = T.hdg
-  tlText(x + 168, rowY + 2,
-         hdg and string.format("%03.0f° %s", hdg, brgLetter(hdg)) or "курс --",
-         FONT_NORMAL, hdg and TL.text or TL.dim)
-
   -- binding summary: how many of the four values are bound
   local n = sensorsBoundCount()
   local col = (n >= 4) and TL.ok or ((n >= 2) and TL.warn or TL.bad)
   local label = string.format("ДАТЧИКИ %d/4", n)
+  local labelW = tlWidth(label, FONT_MINI)
   tlTextRight(x + w - 8, rowY + 2, label, FONT_MINI, col)
+
+  -- heading sits after the speed and only if it does not run into the counter:
+  -- Russian words are wider than the Latin ones, so measure instead of guessing
+  local hdg = T.hdg
+  local hdgText = hdg and string.format("%03.0f° %s", hdg, brgLetter(hdg)) or "курс --"
+  local hdgW = tlWidth(hdgText, FONT_NORMAL)
+  local limit = x + w - labelW - 14
+  local hdgX = x + 168                                   -- the usual, roomy case
+  if hdgX + hdgW > limit then                            -- narrow window: after speed
+    hdgX = x + 68 + tlWidth(spd and string.format("%.1f км/ч", spd) or "скор --",
+                            FONT_NORMAL) + 14
+  end
+  if hdgX + hdgW <= limit then
+    tlText(hdgX, rowY + 2, hdgText, FONT_NORMAL, hdg and TL.text or TL.dim)
+  end
 end
 -- the one line that tells you what to do next; a key action's toast takes it over
 local function nextHint(c)
