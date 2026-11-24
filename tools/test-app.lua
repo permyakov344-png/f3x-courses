@@ -371,8 +371,8 @@ assert(ok, "telemetry raised with a course: " .. tostring(e))
 local blob = table.concat(seen, "\n")
 
 assert(blob:find("Test course"), "active course name not drawn:\n" .. blob)
-assert(blob:find("LINE A%-B"), "no line gauge drawn:\n" .. blob)
-assert(blob:find("SENSORS"), "no sensor status drawn:\n" .. blob)
+assert(blob:find("ЛИНИЯ A%-B"), "no line gauge drawn:\n" .. blob)
+assert(blob:find("ДАТЧИКИ"), "no sensor status drawn:\n" .. blob)
 print("PASS: telemetry shows the course, the A-B gauge and the sensor status")
 
 print("\nall app tests passed")

@@ -15,9 +15,27 @@ local function esc(s)
   return s
 end
 
--- approximate DS-24 II glyph widths
+-- approximate DS-24 II glyph widths; Cyrillic glyphs are a little wider than
+-- Latin ones, so count characters (not bytes) and give them a small bonus
+local function charCount(s)
+  if utf8 and utf8.len then
+    local ok, n = pcall(utf8.len, s)
+    if ok and n then return n end
+  end
+  return #s
+end
+
+local function wideCount(s)
+  local n = charCount(s)
+  local wide = 0
+  for _, cp in utf8.codes(s) do
+    if cp > 127 then wide = wide + 1 end
+  end
+  return n + wide // 4          -- Cyrillic is ~12% wider than Latin
+end
+
 local function textW(font, text)
-  local n = #tostring(text)
+  local n = wideCount(tostring(text))
   if font == 4 then return n * 12 end      -- FONT_MAXI
   if font == 3 then return n * 10 end      -- FONT_BIG
   if font == 2 then return n * 7 end       -- FONT_BOLD

@@ -1,6 +1,6 @@
 -- ###############################################################################################
 -- #  F3X Courses  -  course manager / base-line helper for JETI DC/DS transmitters
--- #  Version 0.1.4  (step A + full screen telemetry: bases A/B, A-B line, live state)
+-- #  Version 0.1.5  (Russian interface; full screen telemetry: bases A/B, A-B line)
 -- #
 -- #  Author of this app:  permyakov344-png
 -- #
@@ -27,7 +27,7 @@
 -- ###############################################################################################
 
 local appName    = "F3X Courses"
-local appVersion = "0.1.4"
+local appVersion = "0.1.5"
 local appAuthor  = "permyakov344-png"
 
 local dataDir   = "Apps/f3xc"
@@ -83,7 +83,7 @@ end
 -- -----------------------------------------------------------------------------------------------
 local function newCourse(name)
   return {
-    name = name or "New course",
+    name = name or "Новый курс",
     typ  = "F3B",
     dist = 150,
     aLat = nil, aLon = nil,
@@ -106,7 +106,7 @@ local function loadCourses()
   end
   if #S.courses == 0 then
     -- seed one empty course so the forms are never empty
-    S.courses[1] = newCourse("My F3B course")
+    S.courses[1] = newCourse("Мой курс F3B")
   end
   if S.active < 1 or S.active > #S.courses then S.active = 1 end
 end
@@ -437,8 +437,8 @@ end
 -- -----------------------------------------------------------------------------------------------
 local function fmtDist(d)
   if d == nil then return "--" end
-  if d >= 1000 then return string.format("%.2f km", d / 1000) end
-  return string.format("%.1f m", d)
+  if d >= 1000 then return string.format("%.2f км", d / 1000) end
+  return string.format("%.1f м", d)
 end
 
 local function fmtBearing(b)
@@ -449,14 +449,14 @@ end
 -- compass letter for a bearing, so the number reads at a glance
 local function brgLetter(b)
   if b == nil then return "?" end
-  local dirs = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+  local dirs = { "С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ" }
   local i = math.floor((b % 360) / 45 + 0.5) % 8 + 1
   return dirs[i]
 end
 
 local function drawHeader(x, y, w)
   local c = activeCourse()
-  local name = c and tostring(c.name) or "no active course"
+  local name = c and tostring(c.name) or "нет активного курса"
   tlFill(x, y, w, 26, TL.panel)
   tlFill(x, y, 4, 26, c and TL.accent or TL.bad)
   tlText(x + 10, y + 5, name, FONT_BOLD, TL.text)
@@ -464,7 +464,7 @@ local function drawHeader(x, y, w)
   local pillW = 92
   local px = x + w - pillW - 6
   tlFill(px, y + 4, pillW, 18, T.fix and TL.ok or TL.bad)
-  tlTextCenter(px, pillW, y + 6, T.fix and "GPS OK" or "GPS LOST",
+  tlTextCenter(px, pillW, y + 6, T.fix and "GPS ЕСТЬ" or "GPS НЕТ",
                FONT_BOLD, TL.bg)
 end
 
@@ -482,13 +482,13 @@ local function drawBaseTile(x, y, w, h, letter, c, dist, brg, which)
   if has then
     tlText(tx, y + 4, fmtDist(dist), FONT_BIG, TL.text)
     tlText(tx, y + 28,
-           (brg and (brgLetter(brg) .. " " .. fmtBearing(brg) .. " deg")) or "--",
+           (brg and (brgLetter(brg) .. " " .. fmtBearing(brg) .. "°")) or "--",
            FONT_NORMAL, TL.accent)
     tlText(tx, y + 46, string.format("%.5f", c[which .. "Lat"]), FONT_MINI, TL.dim)
     tlText(tx, y + 58, string.format("%.5f", c[which .. "Lon"]), FONT_MINI, TL.dim)
   else
-    tlText(tx, y + 6, "not set", FONT_BOLD, TL.warn)
-    tlText(tx, y + 28, which == "a" and "press New here" or "step B: wizard",
+    tlText(tx, y + 6, "не задана", FONT_BOLD, TL.warn)
+    tlText(tx, y + 28, which == "a" and "нажмите F1" or "шаг B: мастер",
            FONT_MINI, TL.dim)
   end
 end
@@ -499,26 +499,26 @@ local function drawGauge(x, y, w, h, off, along, c)
   tlFill(x, y, w, h, TL.panel)
 
   local has = (off ~= nil)
-  local title = "LINE A-B"
+  local title = "ЛИНИЯ A-B"
   local value, color, word
   if not (c and c.aLat and c.bLat) then
-    value, color, word = "--", TL.dim, "set both bases"
+    value, color, word = "--", TL.dim, "задайте базы"
   elseif not T.fix then
-    value, color, word = "--", TL.dim, "no GPS fix"
+    value, color, word = "--", TL.dim, "нет GPS"
   elseif has then
     if math.abs(off) < 0.5 then
-      word = "ON LINE"
+      word = "НА ЛИНИИ"
       color = TL.ok
     elseif off > 0 then
-      word = "RIGHT"
+      word = "ПРАВЕЕ"
       color = TL.warn
     else
-      word = "LEFT"
+      word = "ЛЕВЕЕ"
       color = TL.warn
     end
-    value = string.format("%.1f m", math.abs(off))
+    value = string.format("%.1f м", math.abs(off))
   else
-    value, color, word = "--", TL.dim, "no data"
+    value, color, word = "--", TL.dim, "нет данных"
   end
 
   tlText(x + 8, y + 4, title, FONT_MINI, TL.dim)
@@ -528,7 +528,7 @@ local function drawGauge(x, y, w, h, off, along, c)
   -- distance covered along the line, in the title row, clear of the bar
   if along and c and c.dist then
     tlTextRight(x + w - 8, y + 4,
-                string.format("%.0f / %.0f m", along, tonumber(c.dist) or 0),
+                string.format("%.0f / %.0f м", along, tonumber(c.dist) or 0),
                 FONT_MINI, TL.dim)
   end
 
@@ -552,7 +552,7 @@ local function drawGauge(x, y, w, h, off, along, c)
   -- scale marks so the bar has a meaning
   tlText(bx, by + 10, "-" .. GAUGE_RANGE, FONT_MINI, TL.dim)
   tlTextCenter(bx, bw, by + 10, "0", FONT_MINI, TL.dim)
-  tlTextRight(bx + bw, by + 10, "+" .. GAUGE_RANGE .. " m", FONT_MINI, TL.dim)
+  tlTextRight(bx + bw, by + 10, "+" .. GAUGE_RANGE .. " м", FONT_MINI, TL.dim)
 end
 
 -- bottom strip: sensor chips + speed/heading, so a missing piece is obvious
@@ -562,45 +562,45 @@ local function drawStatus(x, y, w, h)
 
   local okFix = T.fix
   tlFill(x + 6, rowY, 56, 18, okFix and TL.ok or TL.bad)
-  tlTextCenter(x + 6, 56, rowY + 2, okFix and "FIX" or "NO FIX", FONT_MINI, TL.bg)
+  tlTextCenter(x + 6, 56, rowY + 2, okFix and "ФИКС" or "НЕТ", FONT_MINI, TL.bg)
 
   local spd = T.spd
   tlText(x + 68, rowY + 2,
-         spd and string.format("%.1f km/h", spd) or "spd --", FONT_NORMAL,
+         spd and string.format("%.1f км/ч", spd) or "скор --", FONT_NORMAL,
          spd and TL.text or TL.dim)
 
   local hdg = T.hdg
   tlText(x + 168, rowY + 2,
-         hdg and string.format("%03.0f deg %s", hdg, brgLetter(hdg)) or "dir --",
+         hdg and string.format("%03.0f° %s", hdg, brgLetter(hdg)) or "курс --",
          FONT_NORMAL, hdg and TL.text or TL.dim)
 
   -- binding summary: how many of the four values are bound
   local n = sensorsBoundCount()
   local col = (n >= 4) and TL.ok or ((n >= 2) and TL.warn or TL.bad)
-  local label = string.format("SENSORS %d/4", n)
+  local label = string.format("ДАТЧИКИ %d/4", n)
   tlTextRight(x + w - 8, rowY + 2, label, FONT_MINI, col)
 end
 -- the one line that tells you what to do next; a key action's toast takes it over
 local function nextHint(c)
   if not (bound("lat") and bound("lon")) then
-    return "No GPS bound: F3 to bind, or Menu > Applications > F3X Courses > Sensors", TL.bad
+    return "GPS не привязан: нажмите F3", TL.bad
   end
   if not T.fix then
-    return "GPS bound, waiting for a fix (model on, receiver linked)", TL.warn
+    return "GPS привязан, ждём фикс (модель, приёмник)", TL.warn
   end
   if not c then
-    return "No active course: F1 makes a new one at this position", TL.warn
+    return "Нет активного курса: F1 создаст здесь", TL.warn
   end
   if not (c.aLat and c.aLon) then
-    return "Base A is empty: stand on A and press F1", TL.warn
+    return "База A пуста: встаньте на A, нажмите F1", TL.warn
   end
   if not (c.bLat and c.bLon) then
-    return "Base B is empty: step B (A/B wizard) is not built yet", TL.warn
+    return "База B пуста: мастер A/B ещё не сделан", TL.warn
   end
   if T.off == nil then
-    return "Both bases set, waiting for a position to compute the line", TL.dim
+    return "Обе базы есть, ждём позицию для линии", TL.dim
   end
-  return "Ready: distance to A, bearing to A and the A-B line are live", TL.ok
+  return "Готово: до A и линия A-B считаются", TL.ok
 end
 
 local function drawHint(x, y, w, c)
@@ -682,7 +682,7 @@ local function drawTelemetry(w, h)
     pcall(function()
       tlFill(0, 0, w, h, TL.bg)
       tlText(6, 6, appName .. " " .. appVersion, FONT_BOLD, TL.text)
-      tlText(6, 30, "draw error", FONT_BOLD, TL.bad)
+      tlText(6, 30, "ошибка отрисовки", FONT_BOLD, TL.bad)
       tlText(6, 50, telLastErr:sub(1, 60), FONT_MINI, TL.dim)
     end)
   end
@@ -699,25 +699,25 @@ local function keyTelemetryBody(key)
     local la, lo = currentPos()
     if not la then
       beep(2, 500, 250)
-      telSay("no GPS fix")
+      telSay("нет GPS")
       return
     end
-    local c = newCourse(string.format("Course %d", #S.courses + 1))
+    local c = newCourse(string.format("Курс %d", #S.courses + 1))
     c.aLat, c.aLon = la, lo
     S.courses[#S.courses + 1] = c
     S.active = #S.courses
     saveCourses()
     beep(0, 600, 650)
-    telSay(string.format("new course, A = %.5f %.5f", la, lo))
+    telSay(string.format("новый курс, A = %.5f %.5f", la, lo))
 
   elseif key == KEY_2 then                    -- next course
     if #S.courses > 1 then
       S.active = S.active % #S.courses + 1
       saveCourses()
       beep(0, 400, 700)
-      telSay("course " .. S.active .. ": " .. tostring(activeCourse().name))
+      telSay("курс " .. S.active .. ": " .. tostring(activeCourse().name))
     else
-      telSay("only one course")
+      telSay("курс только один")
     end
 
   elseif key == KEY_3 then                    -- rebind sensors from live telemetry
@@ -725,20 +725,20 @@ local function keyTelemetryBody(key)
     sens.lat.id, sens.lat.param = nil, nil
     local ok = pcall(guessSensors)
     beep(ok and 0 or 2, 400, ok and 800 or 300)
-    telSay(string.format("sensors %d/4 bound", sensorsBoundCount()))
+    telSay(string.format("датчики %d/4 привязаны", sensorsBoundCount()))
 
   elseif key == KEY_4 then                    -- reload the course list from card
     loadCourses()
     beep(0, 400, 500)
-    telSay(string.format("reloaded, %d courses", #S.courses))
+    telSay(string.format("прочитано курсов: %d", #S.courses))
 
   elseif key == KEY_5 or key == KEY_ENTER then -- save
     if saveCourses() then
       beep(0, 400, 700)
-      telSay("saved")
+      telSay("сохранено")
     else
       beep(2, 500, 300)
-      telSay("save failed")
+      telSay("ошибка записи")
     end
   end
 end
@@ -746,7 +746,7 @@ end
 local function keyTelemetry(key)
   local ok, err = pcall(keyTelemetryBody, key)
   if not ok then
-    telSay("key error: " .. tostring(err))
+    telSay("ошибка клавиши: " .. tostring(err))
   end
 end
 
@@ -788,10 +788,10 @@ local function initFormCourses()
   if #list == 0 then list[1] = "---" end
 
   form.addRow(1)
-  form.addLabel({ label = "Courses: " .. #S.courses, font = FONT_BOLD })
+  form.addLabel({ label = "Курсов: " .. #S.courses, font = FONT_BOLD })
 
   form.addRow(2)
-  form.addLabel({ label = "Course", width = 95 })
+  form.addLabel({ label = "Курс", width = 95 })
   C.sel = form.addSelectbox(list, ui.sel, true, function(v)
     applyCourseEdits()          -- keep what was typed before switching
     ui.sel = v
@@ -802,19 +802,19 @@ local function initFormCourses()
   if not c then return end
 
   form.addRow(2)
-  form.addLabel({ label = "Name", width = 95 })
+  form.addLabel({ label = "Название", width = 95 })
   C.name = form.addTextbox(tostring(c.name), 24, nil, { width = 250 })
 
   form.addRow(2)
-  form.addLabel({ label = "Type", width = 95 })
+  form.addLabel({ label = "Тип", width = 95 })
   C.typ = form.addSelectbox({ "F3B", "F3F" }, (c.typ == "F3F") and 2 or 1, true, nil, { width = 250 })
 
   form.addRow(2)
-  form.addLabel({ label = "Distance", width = 95 })
+  form.addLabel({ label = "Дистанция", width = 95 })
   C.dist = form.addIntbox(tonumber(c.dist) or 150, 5, 500, 150, 0, 5, nil, { width = 90 })
 
   local function posText(lat, lon)
-    if lat == nil or lon == nil then return "not set" end
+    if lat == nil or lon == nil then return "не задана" end
     return string.format("%.5f  %.5f", lat, lon)
   end
 
@@ -823,18 +823,18 @@ local function initFormCourses()
   form.addRow(1)
   form.addLabel({ label = "B: " .. posText(c.bLat, c.bLon), font = FONT_MINI })
 
-  form.addLink(function() form.reinit(2) end, { label = "Sensors >>" })
+  form.addLink(function() form.reinit(2) end, { label = "Датчики >>" })
 
   if #msg > 0 then
     form.addRow(1)
     form.addLabel({ label = msg, font = FONT_MINI })
   end
 
-  form.setButton(1, "New",     ENABLED)
-  form.setButton(2, "Delete",  #S.courses > 1 and ENABLED or DISABLED)
-  form.setButton(3, "Active",  ENABLED)
-  form.setButton(4, "Reload",  ENABLED)
-  form.setButton(5, "Save",    ENABLED)
+  form.setButton(1, "Новый",   ENABLED)
+  form.setButton(2, "Удалить", #S.courses > 1 and ENABLED or DISABLED)
+  form.setButton(3, "Активный", ENABLED)
+  form.setButton(4, "Читать",  ENABLED)
+  form.setButton(5, "Сохранить", ENABLED)
 end
 
 local function keyFormCourses(key)
@@ -843,17 +843,17 @@ local function keyFormCourses(key)
     local la, lo = currentPos()
     if not la then
       beep(2, 500, 250)
-      msg = "No GPS position. Bind sensors first (Sensors >>)."
+      msg = "Нет GPS. Сначала привяжите датчики (Датчики >>)."
       form.reinit(1)
       return
     end
-    local c = newCourse(string.format("Course %d", #S.courses + 1))
+    local c = newCourse(string.format("Курс %d", #S.courses + 1))
     c.aLat, c.aLon = la, lo
     S.courses[#S.courses + 1] = c
     ui.sel = #S.courses
     saveCourses()
     beep(0, 600, 650)
-    msg = string.format("New course from GPS: %.5f %.5f", la, lo)
+    msg = string.format("Новый курс с GPS: %.5f %.5f", la, lo)
     form.reinit(1)
 
   elseif key == KEY_2 then                   -- delete selected
@@ -912,17 +912,17 @@ end
 local function initFormSensors()
   SC = {}
   buildSensorList()
-  form.setTitle(appName .. " - Sensors")
+  form.setTitle(appName .. " - Датчики")
 
   if #sensorMap <= 1 then
     form.addRow(1)
-    form.addLabel({ label = "No telemetry sensors found.", font = FONT_BOLD })
+    form.addLabel({ label = "Датчики телеметрии не найдены.", font = FONT_BOLD })
     form.addRow(1)
-    form.addLabel({ label = "Switch the model on and", font = FONT_MINI })
+    form.addLabel({ label = "Включите модель и", font = FONT_MINI })
     form.addRow(1)
-    form.addLabel({ label = "check the receiver link.", font = FONT_MINI })
-    form.addLink(function() form.reinit(1) end, { label = "<< Courses" })
-    form.setButton(1, "Back", ENABLED)
+    form.addLabel({ label = "проверьте связь с приёмником.", font = FONT_MINI })
+    form.addLink(function() form.reinit(1) end, { label = "<< Курсы" })
+    form.setButton(1, "Назад", ENABLED)
     return
   end
 
@@ -931,26 +931,26 @@ local function initFormSensors()
 
   local function row(title, which)
     form.addRow(2)
-    form.addLabel({ label = title, width = 75 })
+    form.addLabel({ label = title, width = 85 })
     SC[which] = form.addSelectbox(sensorList, indexOfSensor(which), true,
       sensorChanged(which), { width = 270 })
   end
 
   form.addRow(1)
-  form.addLabel({ label = "Sensor binding  (" .. (#sensorList - 1) .. " values)", font = FONT_BOLD })
+  form.addLabel({ label = "Привязка датчиков  (" .. (#sensorList - 1) .. ")", font = FONT_BOLD })
 
-  row("Lat", "lat")
-  row("Lon", "lon")
-  row("Speed", "spd")
-  row("Dir", "hdg")
+  row("Широта", "lat")
+  row("Долгота", "lon")
+  row("Скорость", "spd")
+  row("Курс", "hdg")
 
   form.addRow(1)
-  form.addLabel({ label = "Bind at least Lat + Lon.", font = FONT_MINI })
+  form.addLabel({ label = "Привяжите минимум широту и долготу.", font = FONT_MINI })
   form.addRow(1)
-  form.addLabel({ label = "Dir is optional (step C).", font = FONT_MINI })
+  form.addLabel({ label = "Курс необязателен (шаг C).", font = FONT_MINI })
 
-  form.addLink(function() form.reinit(1) end, { label = "<< Courses" })
-  form.setButton(1, "Back", ENABLED)
+  form.addLink(function() form.reinit(1) end, { label = "<< Курсы" })
+  form.setButton(1, "Назад", ENABLED)
 end
 
 local function keyFormSensors(key)
@@ -1017,9 +1017,9 @@ local function initFormGuarded(formID)
     log("initForm(" .. tostring(formID) .. ") error: " .. lastError)
     formBuilt = false
     pcall(function()
-      form.addLabel({ label = "F3X: init error", font = FONT_BOLD })
+      form.addLabel({ label = "F3X: ошибка запуска", font = FONT_BOLD })
       form.addLabel({ label = tostring(err):sub(1, 58), font = FONT_MINI })
-      form.setButton(1, "Close", ENABLED)
+      form.setButton(1, "Закрыть", ENABLED)
     end)
   else
     lastError = nil
@@ -1044,23 +1044,23 @@ local function canvasLines(w, h)
 
   if canvasPage == 1 then
     local c = S.courses[canvasSel]
-    add(string.format("Courses: %d   active: %d", #S.courses, S.active), FONT_BOLD)
+    add(string.format("Курсов: %d   активный: %d", #S.courses, S.active), FONT_BOLD)
     if c then
       add(string.format("%d. %s%s", canvasSel, tostring(c.name),
                         canvasSel == S.active and "  *" or ""), FONT_BIG)
-      add(string.format("%s   %.0f m", tostring(c.typ), tonumber(c.dist) or 0))
+      add(string.format("%s   %.0f м", tostring(c.typ), tonumber(c.dist) or 0))
       if c.aLat and c.aLon then
         add(string.format("A %.5f %.5f", c.aLat, c.aLon), FONT_MINI)
       else
-        add("A not set  (F1 New from GPS)", FONT_MINI)
+        add("A не задана  (F1 — с GPS)", FONT_MINI)
       end
       if c.bLat and c.bLon then
         add(string.format("B %.5f %.5f", c.bLat, c.bLon), FONT_MINI)
       else
-        add("B not set  (step B)", FONT_MINI)
+        add("B не задана  (шаг B)", FONT_MINI)
       end
     else
-      add("no courses", FONT_BOLD)
+      add("курсов нет", FONT_BOLD)
     end
     add("", FONT_MINI)
     local la, lo = currentPos()
@@ -1070,30 +1070,30 @@ local function canvasLines(w, h)
         local ok, d = pcall(function()
           return gps.getDistance(gps.newPoint(c.aLat, c.aLon), gps.newPoint(la, lo))
         end)
-        if ok and d then add(string.format("to A  %.1f m", d), FONT_MINI) end
+        if ok and d then add(string.format("до A  %.1f м", d), FONT_MINI) end
       end
     else
-      add("GPS no fix / not bound", FONT_MINI)
+      add("GPS нет фикса / не привязан", FONT_MINI)
     end
     if #canvasMsg > 0 then add(canvasMsg, FONT_MINI) end
     add("", FONT_MINI)
-    add("F1 New  F2 Del  F3 Act", FONT_MINI)
-    add("UP/DN select   F5 Sensors >>", FONT_MINI)
+    add("F1 Нов  F2 Удал  F3 Акт", FONT_MINI)
+    add("ВВЕРХ/ВНИЗ выбор   F5 Датчики >>", FONT_MINI)
   else
     -- sensors page: run the same auto-binding the widget page runs, so the
     -- canvas mode is not a dead end (on this transmitter it is the only mode)
     buildSensorList()
     if not (bound("lat") and bound("lon")) then
       local ok = pcall(guessSensors)
-      if ok then canvasMsg = "auto-bound from telemetry" end
+      if ok then canvasMsg = "привязано автоматически" end
     end
 
     local n = #sensorList - 1
     if n < 0 then n = 0 end
-    add("Sensor binding  (" .. n .. " values)", FONT_BOLD)
+    add("Привязка датчиков  (" .. n .. ")", FONT_BOLD)
 
     local function nameOf(which)
-      if not bound(which) then return "-- not bound --" end
+      if not bound(which) then return "-- не привязан --" end
       for i = 2, #sensorMap do
         local m = sensorMap[i]
         if m.id == sens[which].id and m.param == sens[which].param then
@@ -1103,26 +1103,26 @@ local function canvasLines(w, h)
       return string.format("id %d / p %d", sens[which].id or 0, sens[which].param or 0)
     end
 
-    add("Lat " .. nameOf("lat"), FONT_MINI)
-    add("Lon " .. nameOf("lon"), FONT_MINI)
-    add("Spd " .. nameOf("spd"), FONT_MINI)
-    add("Dir " .. nameOf("hdg"), FONT_MINI)
+    add("Широта " .. nameOf("lat"), FONT_MINI)
+    add("Долгота " .. nameOf("lon"), FONT_MINI)
+    add("Скорость " .. nameOf("spd"), FONT_MINI)
+    add("Курс " .. nameOf("hdg"), FONT_MINI)
 
     add("", FONT_MINI)
     local la, lo = currentPos()
     if la then
-      add(string.format("fix %.5f %.5f", la, lo), FONT_MINI)
+      add(string.format("фикс %.5f %.5f", la, lo), FONT_MINI)
     else
-      add("no fix (model off?)", FONT_MINI)
+      add("нет фикса (модель выкл?)", FONT_MINI)
     end
     local spd, hdg = sensorValue("spd"), sensorValue("hdg")
-    if spd then add(string.format("speed %.1f", spd), FONT_MINI) end
-    if hdg then add(string.format("dir   %.0f", hdg), FONT_MINI) end
+    if spd then add(string.format("скорость %.1f", spd), FONT_MINI) end
+    if hdg then add(string.format("курс   %.0f", hdg), FONT_MINI) end
     if #canvasMsg > 0 then add(canvasMsg, FONT_MINI) end
 
     add("", FONT_MINI)
-    add("F4  rebind (auto)", FONT_MINI)
-    add("ESC / F1  << Courses", FONT_MINI)
+    add("F4  привязать (авто)", FONT_MINI)
+    add("ESC / F1  << Курсы", FONT_MINI)
   end
   return out
 end
@@ -1149,7 +1149,7 @@ local function keyCanvas(key)
     if key == KEY_4 then                 -- rebind from the current telemetry
       buildSensorList()
       local ok = pcall(guessSensors)
-      canvasMsg = ok and "rebound" or "rebind failed"
+      canvasMsg = ok and "привязано" or "не удалось привязать"
       beep(0, 400, 700)
       return
     end
@@ -1170,19 +1170,19 @@ local function keyCanvas(key)
     local la, lo = currentPos()
     if not la then
       beep(2, 500, 250)
-      canvasMsg = "No GPS. F5 for sensors."
+      canvasMsg = "Нет GPS. F5 — датчики."
       return
     end
-    local c = newCourse(string.format("Course %d", #S.courses + 1))
+    local c = newCourse(string.format("Курс %d", #S.courses + 1))
     c.aLat, c.aLon = la, lo
     S.courses[#S.courses + 1] = c
     canvasSel = #S.courses
     saveCourses()
     beep(0, 600, 650)
-    canvasMsg = string.format("New: %.5f %.5f", la, lo)
+    canvasMsg = string.format("Новый: %.5f %.5f", la, lo)
   elseif key == KEY_2 then                       -- delete
     if #S.courses <= 1 then
-      canvasMsg = "Cannot delete the last course"
+      canvasMsg = "Нельзя удалить последний курс"
       return
     end
     table.remove(S.courses, canvasSel)
@@ -1190,17 +1190,17 @@ local function keyCanvas(key)
     if S.active > #S.courses then S.active = #S.courses end
     saveCourses()
     beep(1, 300, 350)
-    canvasMsg = "Deleted"
+    canvasMsg = "Удалено"
   elseif key == KEY_3 then                       -- set active
     S.active = canvasSel
     saveCourses()
     beep(0, 600, 800)
-    canvasMsg = string.format("Active: %s", tostring(S.courses[canvasSel].name))
+    canvasMsg = string.format("Активный: %s", tostring(S.courses[canvasSel].name))
   elseif key == KEY_4 then                       -- reload from card
     loadCourses()
     canvasSel = S.active
     beep(0, 400, 500)
-    canvasMsg = "Reloaded from card"
+    canvasMsg = "Прочитано с карты"
   elseif key == KEY_5 then                       -- sensors page
     canvasPage = 2
     beep(0, 400, 800)
@@ -1299,7 +1299,7 @@ local function initBody()
 
   -- button labels of the full screen window (V6.05+, has no effect on small ones)
   if okT and retT then
-    local labels = { "New", "Next", "Bind", "Reload", "Save" }
+    local labels = { "Новый", "Далее", "Датч", "Читать", "Сохр" }
     for i, text in ipairs(labels) do
       local okB = pcall(system.setTelemetryButton, 1, i, text, ENABLED)
       if not okB then log("setTelemetryButton(" .. i .. ") failed") break end
@@ -1308,7 +1308,7 @@ local function initBody()
 
   if not registered then
     log("FORM NOT REGISTERED")
-    pcall(system.messageBox, appName .. ": form not registered, see log")
+    pcall(system.messageBox, appName .. ": форма не зарегистрирована, см. журнал")
   else
     log("ready")
   end
