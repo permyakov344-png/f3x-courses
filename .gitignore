@@ -1,0 +1,10 @@
+# Windows / редакторы
+Thumbs.db
+desktop.ini
+*.bak
+*.tmp
+*.swp
+
+# Локальные копии данных с передатчика
+Apps/f3xc/courses.jsn
+Apps/f3xc/*.csv
